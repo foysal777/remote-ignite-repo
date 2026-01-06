@@ -1,28 +1,19 @@
-
 from decouple import config
-import os
-
-os.environ['AWS_ACCESS_KEY_ID'] = config('AWS_ACCESS_KEY_ID')
-os.environ['AWS_SECRET_ACCESS_KEY'] = config('AWS_SECRET_ACCESS_KEY')
-os.environ['AWS_DEFAULT_REGION'] = config('AWS_DEFAULT_REGION', default='us-east-2')
-
-
-
 import os
 from pathlib import Path
-from decouple import config
-from dotenv import load_dotenv 
-from pathlib import Path
+from dotenv import load_dotenv
+from datetime import timedelta
 
-
-from decouple import config
-import os
+# --------------------------------------------------
+# ENV
+# --------------------------------------------------
 
 load_dotenv()
-
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# --------------------------------------------------
+# AWS SECRETS
+# --------------------------------------------------
 
 import os
 from .aws_secrets import load_aws_secrets
@@ -42,314 +33,223 @@ STRIPE_WEBHOOK_SECRET = aws_secrets.get("STRIPE_WEBHOOK_SECRET", "")
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
 os.environ["ELEVENLABS_API_KEY"] = ELEVENLABS_API_KEY
-os.environ["STRIPE_SECRET_KEY"] = STRIPE_SECRET_KEY     
-os.environ["STRIPE_WEBHOOK_SECRET"] = STRIPE_WEBHOOK_SECRET   
+os.environ["STRIPE_SECRET_KEY"] = STRIPE_SECRET_KEY
+os.environ["STRIPE_WEBHOOK_SECRET"] = STRIPE_WEBHOOK_SECRET
 os.environ["STRIPE_PREMIUM_PRICE_ID"] = STRIPE_PREMIUM_PRICE_ID
-os.environ["STRIPE_TOPUP_PRICE_ID"] = STRIPE_TOPUP_PRICE_ID      
+os.environ["STRIPE_TOPUP_PRICE_ID"] = STRIPE_TOPUP_PRICE_ID
 
+PINECONE_INDEX_NAME= os.getenv("PINECONE_INDEX_NAME", "")
 print("stripe key :", os.environ.get("STRIPE_SECRET_KEY"))
 print("pinecone key :", os.environ.get("STRIPE_WEBHOOK_SECRET"))
 print("elevenlabs key :", os.environ.get("ELEVENLABS_API_KEY"))
+# --------------------------------------------------
+# SECURITY (PRODUCTION)
+# --------------------------------------------------
 
+SECRET_KEY = config("SECRET_KEY", default="unsafe-secret")
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+DEBUG = False   # ✅ MUST be False in production
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-$5h3i2#$qg#58b1)j00cluqvel2&rp_e^fp**(8f&xyl)!$l71'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ["*"]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Application definition
-
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'storages',
-    # app 
-    'channels',
-    'accounts.apps.AccountsConfig',
-    'chatbot',
-    'subscriptions',
-    'corsheaders',
-    # framework 
-    'rest_framework',
-    'drf_spectacular',
-    'drf_spectacular_sidecar',
+ALLOWED_HOSTS = [
+    "xccess.sensesagi.app",
 ]
 
+# --------------------------------------------------
+# APPLICATIONS
+# --------------------------------------------------
 
-AWS_DEFAULT_ACL = 'public-read'
+INSTALLED_APPS = [
+    "corsheaders",
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
 
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'Ignite Project API',
-    'DESCRIPTION': 'API docs for My Project',
-    'VERSION': '1.0.0',
-    'APPEND_COMPONENTS': {
-        'securitySchemes': {
-            'BearerAuth': {
-                'type': 'http',
-                'scheme': 'bearer',
-                'bearerFormat': 'JWT',
-            }
-        }
-    },
+    "channels",
 
-       'COMPONENT_SPLIT_REQUEST': True,
-    'SWAGGER_UI_SETTINGS': {
-        'persistAuthorization': True,
-    },
-    'SECURITY': [
-        {
-            'Bearer': [] 
-        }
-    ],
-    'SECURITY': [{'BearerAuth': []}],   
+    "accounts",
+    "chatbot",
+    "subscriptions",
 
-    'SWAGGER_UI_SETTINGS': {
-        'persistAuthorization': True,
-    },
-}
-
-AUTH_USER_MODEL = 'accounts.User'
-
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "rest_framework",
 ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    )
+     
 }
 
+AUTH_USER_MODEL = "accounts.User"
+CORS_ALLOW_CREDENTIALS = True
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
-}
+# --------------------------------------------------
+# MIDDLEWARE
+# --------------------------------------------------
 
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",   # MUST be first
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+# --------------------------------------------------
+# PROXY / COOKIE (HTTPS + NGINX)
+# --------------------------------------------------
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
+SECURE_SSL_REDIRECT = True
+
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SAMESITE = "None"
+
+# --------------------------------------------------
+# CORS / CSRF
+# --------------------------------------------------
+
+CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:7006",
+    "https://sensesai.app",
+    "https://resplendent-figolla-685e32.netlify.app",
+    "https://admirable-travesseiro-c07865.netlify.app",
 ]
-
-
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://tripersonal-homelessly-felecia.ngrok-free.app", "http://127.0.0.1:7050/"
+    "https://xccess.sensesagi.app",
+    "https://sensesai.app",
+    "https://resplendent-figolla-685e32.netlify.app",
+    "https://admirable-travesseiro-c07865.netlify.app",
 ]
-CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOW_HEADERS = ["*"]
-CORS_ALLOW_METHODS = ["*"]
+# --------------------------------------------------
+# CORS HEADERS (VERY IMPORTANT)
+# --------------------------------------------------
 
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
 
-# --------------------- AWS ----------------------------------
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
 
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "us-east-1")
-AWS_S3_SIGNATURE_VERSION = "s3v4"
-AWS_DEFAULT_ACL = None 
-AWS_S3_VERIFY = True
+# --------------------------------------------------
+# DATABASE (POSTGRES ON EC2)
+# --------------------------------------------------
 
-
-
-
-
-
-# Keep all files private
-AWS_QUERYSTRING_AUTH = True  
-
-DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
-
-
-AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
-
-MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
-
-
-MEDIA_ROOT = ""
-
-
-
-
-# OpenAI + Pinecone
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-# PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
-PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
-# ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-
-
-# celery settings
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
-
-# Static
-STATIC_URL = "/static/"
-
-
-
-
-
-
-
-
-
-
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'Ignite Project API',
-    'DESCRIPTION': 'AI & Subscription Based',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-
-}
-
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME"),
+        "USER": config("DB_USER"),
+        "PASSWORD": config("DB_PASSWORD"),
+        "HOST": config("DB_HOST"),
+        "PORT": config("DB_PORT", cast=int),
     }
 }
-CORS_ALLOW_ALL_ORIGINS = True
 
-EMAIL_BACKEND = config('EMAIL_BACKEND')
-EMAIL_HOST = config('EMAIL_HOST')
-EMAIL_PORT = config('EMAIL_PORT', cast=int)  
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-ELEVENLABS_AGENT_ID = config('AGENT_ID')
+# --------------------------------------------------
+# REDIS / CELERY
+# --------------------------------------------------
 
+CELERY_BROKER_URL = config("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND")
 
-
-
-STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY') 
-STRIPE_PREMIUM_PRICE_ID = config('STRIPE_PREMIUM_PRICE_ID')
-STRIPE_TOPUP_PRICE_ID = config('STRIPE_TOPUP_PRICE_ID')      
-STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET')                 
-
-
-from datetime import timedelta
-
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=7),  
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7), 
-   
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [CELERY_BROKER_URL],
+        },
+    }
 }
 
+# --------------------------------------------------
+# EMAIL
+# --------------------------------------------------
 
+EMAIL_BACKEND = config("EMAIL_BACKEND")
+EMAIL_HOST = config("EMAIL_HOST")
+EMAIL_PORT = config("EMAIL_PORT", cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
+ELEVENLABS_AGENT_ID = config('AGENT_ID')
 
+# --------------------------------------------------
+# JWT
+# --------------------------------------------------
 
-ROOT_URLCONF = 'project_root.urls'
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
+
+# --------------------------------------------------
+# URL / ASGI / WSGI
+# --------------------------------------------------
+
+ROOT_URLCONF = "project_root.urls"
+WSGI_APPLICATION = "project_root.wsgi.application"
+ASGI_APPLICATION = "project_root.asgi.application"
+
+# --------------------------------------------------
+# TEMPLATES
+# --------------------------------------------------
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
-    },
-]
-
-WSGI_APPLICATION = 'project_root.wsgi.application'
-ASGI_APPLICATION = 'project_root.asgi.application'
-
-
-
-
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
     }
-}
-
-
-# Password validation
-# https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
-
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
 ]
 
+# --------------------------------------------------
+# STATIC & MEDIA
+# --------------------------------------------------
 
-# Internationalization
-# https://docs.djangoproject.com/en/4.2/topics/i18n/
+STATIC_URL = "/static/"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-LANGUAGE_CODE = 'en-us'
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-TIME_ZONE = 'UTC'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-USE_I18N = True
-
-USE_TZ = True
-
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
-import os
-
-# ... other settings ...
-
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-STATIC_URL = 'static/'
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
-
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

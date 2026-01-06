@@ -1,4 +1,12 @@
 .env
-venv
-db.sqlite3
+.env.*
 __pycache__/
+*.pyc
+media/
+staticfiles/
+*.log
+.idea/
+.vscode/
+node_modules/
+*.sqlite3
+
