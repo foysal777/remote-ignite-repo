@@ -1,0 +1,6 @@
+● gunicorn.service - Gunicorn service for Ignite Django project
+     Loaded: loaded (]8;;file://ip-172-31-39-232.us-east-2.compute.internal/etc/systemd/system/gunicorn.service/etc/systemd/system/gunicorn.service]8;;; [0;1;32menabled[0m; preset: [0;1;38;5;185mdisabled[0m)
+     Active: activating (auto-restart) (Result: exit-code) since Sat 2026-01-10 07:43:50 UTC; 121ms ago
+    Process: 171535 ExecStart=/usr/local/bin/gunicorn project_root.wsgi:application --bind 127.0.0.1:8000 --workers 3 --threads 2 --timeout 180 --access-logfile - --error-logfile - [0;1;31m(code=exited, status=1/FAILURE)[0m
+   Main PID: 171535 (code=exited, status=1/FAILURE)
+        CPU: 187ms

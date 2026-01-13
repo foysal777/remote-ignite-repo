@@ -4,6 +4,19 @@ services:
     container_name: ignite-redis
     restart: always
 
+  postgres:
+    image: postgres:15
+    container_name: ignite-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: senses_app_db
+      POSTGRES_USER: senses_app_user
+      POSTGRES_PASSWORD: aDMbB123kV
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     container_name: ignite-backend
     build: .
@@ -20,6 +33,7 @@ services:
       - /opt/ignite/media:/app/media
     depends_on:
       - redis
+      - postgres
     restart: always
 
   celery:
@@ -30,5 +44,9 @@ services:
       - .env
     depends_on:
       - redis
+      - postgres
     restart: always
+
+volumes:
+  postgres_data:
 

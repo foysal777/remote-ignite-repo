@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
+from corsheaders.defaults import default_headers
 
 # --------------------------------------------------
 # ENV
@@ -15,7 +16,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # AWS SECRETS
 # --------------------------------------------------
 
-import os
 from .aws_secrets import load_aws_secrets
 
 aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
@@ -28,70 +28,62 @@ STRIPE_PREMIUM_PRICE_ID = aws_secrets.get("STRIPE_PREMIUM_PRICE_ID", "")
 STRIPE_TOPUP_PRICE_ID = aws_secrets.get("STRIPE_TOPUP_PRICE_ID", "")
 STRIPE_WEBHOOK_SECRET = aws_secrets.get("STRIPE_WEBHOOK_SECRET", "")
 
+os.environ.update({
+    "OPENAI_API_KEY": OPENAI_API_KEY,
+    "PINECONE_API_KEY": PINECONE_API_KEY,
+    "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
+    "STRIPE_SECRET_KEY": STRIPE_SECRET_KEY,
+    "STRIPE_WEBHOOK_SECRET": STRIPE_WEBHOOK_SECRET,
+    "STRIPE_PREMIUM_PRICE_ID": STRIPE_PREMIUM_PRICE_ID,
+    "STRIPE_TOPUP_PRICE_ID": STRIPE_TOPUP_PRICE_ID,
+})
 
-# Export for external SDKs
-os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
-os.environ["ELEVENLABS_API_KEY"] = ELEVENLABS_API_KEY
-os.environ["STRIPE_SECRET_KEY"] = STRIPE_SECRET_KEY
-os.environ["STRIPE_WEBHOOK_SECRET"] = STRIPE_WEBHOOK_SECRET
-os.environ["STRIPE_PREMIUM_PRICE_ID"] = STRIPE_PREMIUM_PRICE_ID
-os.environ["STRIPE_TOPUP_PRICE_ID"] = STRIPE_TOPUP_PRICE_ID
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
 
-PINECONE_INDEX_NAME= os.getenv("PINECONE_INDEX_NAME", "")
-print("stripe key :", os.environ.get("STRIPE_SECRET_KEY"))
-print("pinecone key :", os.environ.get("STRIPE_WEBHOOK_SECRET"))
-print("elevenlabs key :", os.environ.get("ELEVENLABS_API_KEY"))
 # --------------------------------------------------
-# SECURITY (PRODUCTION)
+# SECURITY
 # --------------------------------------------------
 
 SECRET_KEY = config("SECRET_KEY", default="unsafe-secret")
-
-DEBUG = False   # ✅ MUST be False in production
-
-ALLOWED_HOSTS = [
-    "xccess.sensesagi.app",
-]
+DEBUG = False
+ALLOWED_HOSTS = ["*"]
 
 # --------------------------------------------------
 # APPLICATIONS
 # --------------------------------------------------
 
 INSTALLED_APPS = [
-    "corsheaders",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
+    "corsheaders",
     "channels",
-
     "accounts",
     "chatbot",
     "subscriptions",
-
     "rest_framework",
 ]
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
-     
-}
-
 AUTH_USER_MODEL = "accounts.User"
-CORS_ALLOW_CREDENTIALS = True
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.AllowAny",
+    ),
+}
 
 # --------------------------------------------------
 # MIDDLEWARE
 # --------------------------------------------------
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",   # MUST be first
+    "corsheaders.middleware.CorsMiddleware",  # MUST be first
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -102,67 +94,55 @@ MIDDLEWARE = [
 ]
 
 # --------------------------------------------------
-# PROXY / COOKIE (HTTPS + NGINX)
+# PROXY / HTTPS
 # --------------------------------------------------
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = False  # IMPORTANT for CORS preflight (can enable later)
 
-SECURE_SSL_REDIRECT = True
+# --------------------------------------------------
+# CORS / CSRF (FIXED)
+# --------------------------------------------------
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
+
+CORS_ALLOWED_ORIGINS = [
+    "https://resplendent-figolla-685e32.netlify.app",
+    "https://xccess.sensesagi.app",
+    "https://sensesai.app",
+]
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "authorization",
+    "content-type",
+    "x-csrftoken",
+    "ngrok-skip-browser-warning",
+]
+
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://resplendent-figolla-685e32.netlify.app",
+    "https://xccess.sensesagi.app",
+    "https://sensesai.app",
+]
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
-
 SESSION_COOKIE_SAMESITE = "None"
 CSRF_COOKIE_SAMESITE = "None"
 
 # --------------------------------------------------
-# CORS / CSRF
-# --------------------------------------------------
-
-CORS_ALLOW_CREDENTIALS = True
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:7006",
-    "https://sensesai.app",
-    "https://resplendent-figolla-685e32.netlify.app",
-    "https://admirable-travesseiro-c07865.netlify.app",
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://xccess.sensesagi.app",
-    "https://sensesai.app",
-    "https://resplendent-figolla-685e32.netlify.app",
-    "https://admirable-travesseiro-c07865.netlify.app",
-]
-
-# --------------------------------------------------
-# CORS HEADERS (VERY IMPORTANT)
-# --------------------------------------------------
-
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "accept-encoding",
-    "authorization",
-    "content-type",
-    "dnt",
-    "origin",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-]
-
-CORS_ALLOW_METHODS = [
-    "DELETE",
-    "GET",
-    "OPTIONS",
-    "PATCH",
-    "POST",
-    "PUT",
-]
-
-# --------------------------------------------------
-# DATABASE (POSTGRES ON EC2)
+# DATABASE
 # --------------------------------------------------
 
 DATABASES = {
@@ -202,7 +182,7 @@ EMAIL_PORT = config("EMAIL_PORT", cast=int)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
-ELEVENLABS_AGENT_ID = config('AGENT_ID')
+ELEVENLABS_AGENT_ID = config("AGENT_ID")
 
 # --------------------------------------------------
 # JWT
