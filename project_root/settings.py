@@ -18,6 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 from .aws_secrets import load_aws_secrets
 
+
 aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
 
 OPENAI_API_KEY = aws_secrets.get("OPENAI_API_KEY", "")
@@ -135,6 +136,18 @@ CSRF_TRUSTED_ORIGINS = [
     "https://xccess.sensesagi.app",
     "https://sensesai.app",
 ]
+
+
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "us-east-1")
+AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_DEFAULT_ACL = None 
+AWS_S3_VERIFY = True
+
+
+
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
