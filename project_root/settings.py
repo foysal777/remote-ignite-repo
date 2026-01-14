@@ -168,6 +168,23 @@ CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "None"
 CSRF_COOKIE_SAMESITE = "None"
 
+
+
+# FireBase Verify Token 
+
+import firebase_admin
+from firebase_admin import credentials
+
+FIREBASE_CERT_PATH = os.path.join(BASE_DIR, "firebase-service-account.json")
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_CERT_PATH)
+    firebase_admin.initialize_app(cred)
+
+
+
+
+
 # --------------------------------------------------
 # DATABASE
 # --------------------------------------------------

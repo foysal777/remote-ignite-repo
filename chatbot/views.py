@@ -972,8 +972,7 @@ def user_plan_info(request):
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from google.oauth2 import id_token
-from google.auth.transport import requests
+from firebase_admin import auth
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -981,25 +980,28 @@ User = get_user_model()
 
 class FirebaseGoogleAuthView(APIView):
     def post(self, request):
+        print("\n========== FIREBASE ADMIN LOGIN ==========")
+
         id_token_str = request.data.get("id_token")
 
         if not id_token_str:
+            print(" No id_token provided")
             return Response({"error": "id_token is required"}, status=400)
 
         try:
-     
-            firebase_user = id_token.verify_firebase_token(
-                id_token_str,
-                requests.Request()
-            )
+            #  Firebase Admin verification (no Google cert problems)
+            decoded = auth.verify_id_token(id_token_str)
+            print("Decoded Firebase user:", decoded)
 
         except Exception as e:
-            return Response({"error": "Invalid Firebase Google token"}, status=400)
+            print(" Firebase verify failed:", str(e))
+            return Response({"error": "Invalid Firebase token"}, status=401)
 
-     
-        email = firebase_user.get("email")
-        name = firebase_user.get("name", "")
-      
+        email = decoded.get("email")
+        name = decoded.get("name", "")
+
+        print("Firebase email:", email)
+        print("Firebase name:", name)
 
         if not email:
             return Response({"error": "Email not found"}, status=400)
@@ -1007,23 +1009,26 @@ class FirebaseGoogleAuthView(APIView):
         user, created = User.objects.get_or_create(email=email)
 
         if created:
+            print("New user created:", email)
             user.is_active = True
             if hasattr(user, "name"):
                 user.name = name
             user.save()
+        else:
+            print(" Existing user:", email)
 
-       
         refresh = RefreshToken.for_user(user)
-        access = refresh.access_token
+
+        print("JWT issued for:", email)
+        print("========== LOGIN SUCCESS ==========\n")
 
         return Response({
             "refresh": str(refresh),
-            "access": str(access),
-            "email": email,
+            "access": str(refresh.access_token),
+            "email": user.email,
             "name": name,
-            "user_type": getattr(user, "role", None)  
+            "user_type": getattr(user, "role", None)
         })
-
 
 
 
