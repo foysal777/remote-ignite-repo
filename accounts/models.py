@@ -56,7 +56,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     otp = models.CharField(max_length=4, blank=True, null=True)
     otp_created_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True,null=True , blank=True) 
-    total_time = models.IntegerField(default=600)  # 10 min = 600 seconds
+    total_time = models.IntegerField(default=900)  # 10 min = 600 seconds
 
 
 
@@ -75,14 +75,36 @@ class User(AbstractBaseUser, PermissionsMixin):
     def reset_prompt_count_if_needed(self):
         now = timezone.now()
         if self.last_reset.month != now.month or self.last_reset.year != now.year:
-            self.monthly_prompt_count = 0
-            self.extra_prompts = 0
+            self.monthly_prompt_count = 0   # usage reset
             self.last_reset = now
             self.save()
-
+ 
+ 
+ 
+    def add_prompts_after_payment(self):
+        self.reset_prompt_count_if_needed()
+ 
+        if self.plan_type == "premium":
+            self.extra_prompts += 100
+            self.is_plan_paid = True
+            self.plan_start_date = timezone.now()
+            self.plan_end_date = timezone.now() + timezone.timedelta(days=30)
+ 
+        self.save()
+ 
+ 
+    def can_use_prompt(self):
+        self.reset_prompt_count_if_needed()
+ 
+        total_allowed = 100 + self.extra_prompts
+        return self.monthly_prompt_count < total_allowed
+ 
+ 
+ 
     def increment_prompt_count(self):
         self.monthly_prompt_count += 1
         self.save()
+    
     
 
 

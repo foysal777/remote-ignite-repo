@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    contact_submit, 
     AllRegisteredUsersView,
     RegisterView,
     VerifyOTPView,
@@ -22,6 +23,6 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
     path("all-users/", AllRegisteredUsersView.as_view(), name="all_users"),
-
+    path("contact/", contact_submit, name="contact_submit"),
 
 ]

@@ -31,6 +31,7 @@ services:
     volumes:
       - /opt/ignite/staticfiles:/app/staticfiles
       - /opt/ignite/media:/app/media
+      - /root/ignite-secrets/firebase-service-account.json:/app/firebase-service-account.json:ro
     depends_on:
       - redis
       - postgres
@@ -42,6 +43,8 @@ services:
     command: celery -A project_root worker -l info
     env_file:
       - .env
+    volumes:
+      - /root/ignite-secrets/firebase-service-account.json:/app/firebase-service-account.json:ro
     depends_on:
       - redis
       - postgres

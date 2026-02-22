@@ -423,7 +423,6 @@ class VoiceResponseView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request):
         user = request.user
-        check_prompt_limit(user) 
 
         if "audio" not in request.FILES:
             return Response({"error": "No audio file provided"}, status=status.HTTP_400_BAD_REQUEST)
@@ -803,7 +802,8 @@ def stripe_webhook(request):
         if user:
             user.plan_type = "premium"
             user.is_plan_paid = True
-            user.save(update_fields=["plan_type", "is_plan_paid"])
+            user.total_time += 1200
+            user.save(update_fields=["plan_type", "is_plan_paid","total_time"])
             print(f"[Stripe] User upgraded → {user.email}")
 
         return JsonResponse({"status": "success"}, status=200)
@@ -1033,6 +1033,9 @@ class FirebaseGoogleAuthView(APIView):
 
 
 
+
+
+
 import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -1065,17 +1068,26 @@ class GetSignedURLView(APIView):
             user = request.user
             total_time = getattr(user, "total_time", 0)
             plan_type = getattr(user, "plan_type", None)
+            role = getattr(user, "role", "user")
 
-            if total_time == 0:
-                return Response(
-                    {
-                        "error": "No remaining usage time. Please upgrade your plan.",
-                        "total_time": total_time,
-                        "plan_type": plan_type,
-                        "signedUrl": None
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            # ----------- Usage Logic -----------
+            if role == "admin":
+                is_unlimited = True
+            else:
+                is_unlimited = False
+
+                if total_time <= 0:
+                    return Response(
+                        {
+                            "error": "No remaining usage time. Please upgrade your plan.",
+                            "total_time": total_time,
+                            "is_unlimited": False,
+                            "role": role,
+                            "plan_type": plan_type,
+                            "signedUrl": None,
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
             # -------------------- ELEVENLABS REQUEST --------------------
             url = (
@@ -1093,14 +1105,29 @@ class GetSignedURLView(APIView):
             if api_response.status_code != 200:
                 try:
                     error_data = api_response.json()
-                except:
+                except Exception:
                     error_data = {"detail": "Unknown error"}
+
+                # admin response এ total_time থাকবে না
+                if role == "admin":
+                    return Response(
+                        {
+                            "error": f"API error: {api_response.status_code}",
+                            "detail": error_data,
+                            "is_unlimited": is_unlimited,
+                            "role": role,
+                            "plan_type": plan_type,
+                        },
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
 
                 return Response(
                     {
                         "error": f"API error: {api_response.status_code}",
                         "detail": error_data,
                         "total_time": total_time,
+                        "is_unlimited": is_unlimited,
+                        "role": role,
                         "plan_type": plan_type,
                     },
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1109,13 +1136,27 @@ class GetSignedURLView(APIView):
             data = api_response.json()
             signed_url = data.get("signed_url")
 
+            # ----------- Success Response -----------
+            if role == "admin":
+                return Response(
+                    {
+                        "signedUrl": signed_url,
+                        "is_unlimited": True,
+                        "role": role,
+                        "plan_type": plan_type,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
             return Response(
                 {
                     "signedUrl": signed_url,
                     "total_time": total_time,
+                    "is_unlimited": False,
+                    "role": role,
                     "plan_type": plan_type,
                 },
-                status=200,
+                status=status.HTTP_200_OK,
             )
 
         except Exception as e:
@@ -1126,5 +1167,3 @@ class GetSignedURLView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-

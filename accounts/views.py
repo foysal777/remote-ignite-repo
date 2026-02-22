@@ -370,3 +370,64 @@ class AllRegisteredUsersView(APIView):
         users = User.objects.all().order_by("-created_at")
         serializer = UserListSerializer(users, many=True)
         return Response(serializer.data)
+
+
+
+
+
+
+import json
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.core.mail import EmailMessage
+from django.utils.html import escape
+ 
+@csrf_exempt
+def contact_submit(request):
+    if request.method != "POST":
+        return JsonResponse({"detail": "Method not allowed"}, status=405)
+ 
+ 
+    try:
+        if request.content_type and "application/json" in request.content_type:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        else:
+            data = request.POST
+    except Exception:
+        return JsonResponse({"detail": "Invalid payload"}, status=400)
+ 
+    first_name = (data.get("first_name") or data.get("firstName") or "").strip()
+    last_name  = (data.get("last_name")  or data.get("lastName")  or "").strip()
+    email      = (data.get("email") or "").strip()
+    message    = (data.get("message") or "").strip()
+ 
+ 
+    if not first_name or not last_name or not email or not message:
+        return JsonResponse(
+            {"detail": "first_name, last_name, email, message are required"},
+            status=400
+        )
+ 
+    # Compose email
+    subject = f"New Contact Message — {first_name} {last_name}"
+    safe_message = escape(message)
+ 
+    body = (
+        f"New contact form submission:\n\n"
+        f"Name: {first_name} {last_name}\n"
+        f"Email: {email}\n\n"
+        f"Message:\n{message}\n"
+    )
+ 
+    try:
+        mail = EmailMessage(
+            subject=subject,
+            body=body,
+            to=["support@sensesaiapp.com"],          #
+            reply_to=[email],                        #
+        )
+        mail.send(fail_silently=False)
+    except Exception as e:
+        return JsonResponse({"detail": "Email send failed", "error": str(e)}, status=500)
+ 
+    return JsonResponse({"detail": "Message sent successfully"}, status=200)

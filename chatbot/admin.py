@@ -1,6 +1,6 @@
+
 from django.contrib import admin
-from .models import UploadFile , QueryHistory 
+from .models import QueryHistory 
 
 
-admin.site.register(UploadFile)
 admin.site.register(QueryHistory)

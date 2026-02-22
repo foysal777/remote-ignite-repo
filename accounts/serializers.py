@@ -3,6 +3,7 @@ from .models import User , Profile
 from django.contrib.auth import authenticate
 from drf_spectacular.utils import extend_schema_field
 from drf_spectacular.types import OpenApiTypes
+import re
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -10,6 +11,34 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('email', 'password')
+
+    def validate_password(self, value):
+        if len(value) < 6:
+            raise serializers.ValidationError(
+                "Password must be at least 6 characters long."
+            )
+ 
+        if not re.search(r'[A-Z]', value):
+            raise serializers.ValidationError(
+                "Password must contain at least one uppercase letter."
+            )
+ 
+        if not re.search(r'[a-z]', value):
+            raise serializers.ValidationError(
+                "Password must contain at least one lowercase letter."
+            )
+ 
+        if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', value):
+            raise serializers.ValidationError(
+                "Password must contain at least one special character."
+            )
+ 
+        return value
+  
+
+
+
+
 
 class OTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -45,19 +74,34 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 
+from rest_framework import serializers
+from .models import Profile
+ 
 class ProfileSerializer(serializers.ModelSerializer):
     profile_picture = serializers.ImageField(required=False, allow_null=True)
-    email = serializers.EmailField(source='user.email', read_only=True) 
-    role=serializers.CharField(source='user.role', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    role = serializers.CharField(source='user.role', read_only=True)
+ 
+    def validate_profile_picture(self, image):
+        if image is None:
+            return image
+ 
+        max_size = 20 * 1024 * 1024  # 20 MB
+        if image.size > max_size:
+            raise serializers.ValidationError(
+                "Profile picture size must be less than or equal to 20 MB."
+            )
+        return image
+ 
     class Meta:
         model = Profile
-
-        fields = [ 'email',
-            'first_name', 'last_name', 'gender', 'profession', 
-            'date_of_birth', 'profile_picture', 'phone', 'location', 
-            'personal_email', 'about_yourself', 'professional_background', 'role'
+        fields = [
+            'email',
+            'first_name', 'last_name', 'gender', 'profession',
+            'date_of_birth', 'profile_picture', 'phone', 'location',
+            'personal_email', 'about_yourself', 'professional_background',
+            'role'
         ]
-
 
 
 from rest_framework import serializers
