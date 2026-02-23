@@ -507,6 +507,34 @@ def contact_submit(request):
 
 
 
+# accounts/views.py
+from rest_framework import generics, permissions
+from django.contrib.auth import get_user_model
+from .serializers import UserCreateSerializer, UserUpdateSerializer
+
+User = get_user_model()
+
+
+class IsAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.role == "admin")
+
+
+class UserCreateAPIView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserCreateSerializer
+    permission_classes = [IsAdmin]
+
+
+class UserUpdateDeleteAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserUpdateSerializer
+    permission_classes = [IsAdmin]
+    lookup_field = "id"
+
+
+
+
 class UserLimitsOverviewView(APIView):
     """
     GET /auth/user-limits/
