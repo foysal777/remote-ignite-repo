@@ -173,6 +173,66 @@ class LoginView(generics.GenericAPIView):
 
         return response
 
+
+
+class LogoutView(generics.GenericAPIView):
+    """Clear both JWT cookies (access + refresh) to log the user out."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        response = Response({'detail': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+        delete_auth_cookies(response)
+        return response
+
+
+class TokenRefreshCookieView(generics.GenericAPIView):
+    """
+    Rotate access + refresh tokens using the refresh cookie.
+    ROLLBACK SAFE: old cookies are only replaced after successful rotation.
+    Frontend never sees raw token values.
+    """
+
+    def post(self, request, *args, **kwargs):
+        from django.conf import settings
+        refresh_cookie_name = getattr(settings, 'JWT_COOKIE_REFRESH_NAME', 'refresh')
+        refresh_token_str = request.COOKIES.get(refresh_cookie_name)
+
+        if not refresh_token_str:
+            return Response(
+                {'detail': 'Refresh token cookie not found.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            # Validate and rotate
+            old_refresh = RefreshToken(refresh_token_str)
+            new_access  = old_refresh.access_token
+
+            # Issue a brand-new refresh token
+            old_refresh.set_jti()
+            old_refresh.set_exp()
+
+            response = Response({'detail': 'Token refreshed.'}, status=status.HTTP_200_OK)
+
+            # Only now commit the new cookies (rollback: if we raised above, nothing changed)
+            set_auth_cookies(
+                response,
+                access_token=str(new_access),
+                refresh_token=str(old_refresh),
+            )
+
+            return response
+
+        except (TokenError, InvalidToken) as e:
+            return Response(
+                {'detail': f'Invalid or expired refresh token: {str(e)}'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+
+
+
+
 class ResendOTPView(generics.GenericAPIView):
     serializer_class = ResendOTPSerializer
 
