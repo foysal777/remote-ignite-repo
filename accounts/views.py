@@ -27,7 +27,8 @@ from django.contrib.auth.hashers import make_password
 from .models import User
 from .serializers import RegisterSerializer
 from .utils import generate_otp, send_otp_email
-
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+from .cookie_utils import set_auth_cookies, delete_auth_cookies
 
 class RegisterView(generics.GenericAPIView):
     serializer_class = RegisterSerializer
@@ -152,13 +153,25 @@ class LoginView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data
         refresh = RefreshToken.for_user(user)
-        return Response({
-            'role' : user.role ,
-            'email' :user.email,
-            'success_msg' : "login successfull",
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
+        access_token  = str(refresh.access_token)
+        refresh_token = str(refresh)
+
+        response = Response({
+            'role':        user.role,
+            'email':       user.email,
+            'success_msg': 'login successfull',
+            'refresh':     refresh_token,
+            'access':      access_token,
         })
+
+        # Also set as HttpOnly cookies for browser clients
+        set_auth_cookies(
+            response,
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )
+
+        return response
 
 class ResendOTPView(generics.GenericAPIView):
     serializer_class = ResendOTPSerializer
@@ -431,3 +444,41 @@ def contact_submit(request):
         return JsonResponse({"detail": "Email send failed", "error": str(e)}, status=500)
  
     return JsonResponse({"detail": "Message sent successfully"}, status=200)
+
+
+
+class UserLimitsOverviewView(APIView):
+    """
+    GET /auth/user-limits/
+    Returns the logged-in user's own pending text_prompts and voice_limit.
+
+    Limits (from utils_permissions.py):
+        freebie : 25 prompts / month
+        premium : 50 prompts / month  + extra_prompts top-ups
+    Voice     : total_time in seconds (default 600 = 10 min)
+    """
+    permission_classes = [IsAuthenticated]
+
+    BASE_LIMIT = {'freebie': 20, 'premium': 50}
+
+    def get(self, request):
+        user = request.user
+        user.reset_prompt_count_if_needed()
+
+        base            = self.BASE_LIMIT.get(user.plan_type, 20)
+        total_allowed   = base + user.extra_prompts
+        pending_prompts = max(total_allowed - user.monthly_prompt_count, 0)
+
+        return Response({
+            "email":           user.email,
+            "plan_type":       user.plan_type,
+            "base_limit":      base,
+            "extra_prompts":   user.extra_prompts,
+            "total_allowed":   total_allowed,
+            "used_prompts":    user.monthly_prompt_count,
+            "pending_prompts": pending_prompts,
+            "voice_limit_sec": user.total_time,
+            "voice_limit_min": user.total_time / 60,
+            "is_plan_paid":    user.is_plan_paid,
+            "plan_end_date":   user.plan_end_date,
+        }, status=status.HTTP_200_OK)

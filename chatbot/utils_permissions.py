@@ -14,7 +14,7 @@ def check_prompt_limit(user):
     if user.monthly_prompt_count >= total_limit:
         raise PermissionDenied(
             f"You have reached your monthly limit of {base_limit} prompts. "
-            f"Please wait for next month or buy a top-up."
+            f"You buy a top-up."
         )
 
     user.increment_prompt_count()

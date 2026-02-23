@@ -71,12 +71,12 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        # Cookie-based JWT: reads access token from HttpOnly cookie,
+        # falls back to Authorization header for backward compatibility.
+        'accounts.authentication.CookieJWTAuthentication',
     ),
-    "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.AllowAny",
-    ),
+     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 
@@ -106,8 +106,21 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'accounts.middleware.CookieTokenRefreshMiddleware',
+
 ]
 
+# ── JWT Cookie Configuration ──────────────────────────────────────────────────
+# Cookie names: what the browser sends / what we look for
+JWT_COOKIE_ACCESS_NAME    = 'access'
+JWT_COOKIE_REFRESH_NAME   = 'refresh'
+# Security flags
+JWT_COOKIE_SECURE         = True    # ngrok uses HTTPS — required for SameSite=None
+JWT_COOKIE_HTTPONLY       = True    # Never readable by JavaScript
+JWT_COOKIE_SAMESITE       = 'None'  # Cross-site: frontend & backend on different hosts
+# Lifetimes must match SIMPLE_JWT token lifetimes (in seconds)
+JWT_COOKIE_ACCESS_MAX_AGE  = 7 * 3600         # 7 hours
+JWT_COOKIE_REFRESH_MAX_AGE = 7 * 24 * 3600    # 7 days
 # --------------------------------------------------
 # PROXY / HTTPS
 # --------------------------------------------------

@@ -762,6 +762,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from accounts.models import User
 from datetime import datetime, timezone as dt_timezone
+from .models import ProcessedStripeEvent
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -786,6 +787,11 @@ def stripe_webhook(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
+
+    
+    if ProcessedStripeEvent.objects.filter(stripe_event_id=event["id"]).exists():
+        return JsonResponse({"status": "already processed"}, status=200)
+
     print(f"[Stripe] Event received → {event['type']}")
 
    
@@ -802,7 +808,8 @@ def stripe_webhook(request):
         if user:
             user.plan_type = "premium"
             user.is_plan_paid = True
-            user.total_time += 1200
+            user.extra_prompts += 50
+            user.total_time += 3600
             user.save(update_fields=["plan_type", "is_plan_paid","total_time"])
             print(f"[Stripe] User upgraded → {user.email}")
 
