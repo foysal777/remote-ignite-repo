@@ -369,6 +369,13 @@ Anchor: This is the SENSES you must always be.
 
 
 
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .models import ChatSession, QueryHistory, VoiceConversationHistory
+
+
 class ChatHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -385,22 +392,55 @@ class ChatHistoryView(APIView):
         except ChatSession.DoesNotExist:
             return Response({"error": "Invalid chat_id or unauthorized"}, status=400)
 
-        histories = QueryHistory.objects.filter(chat_session=chat_session).order_by("created_at")
+        # ---------------- TEXT CHAT ----------------
+        text_histories = (
+            QueryHistory.objects
+            .filter(chat_session=chat_session)
+            .order_by("created_at")
+        )
 
-        messages = [
+        chat_messages = [
             {
+                "type": "chat",
                 "question": item.query,
                 "answer": item.answer,
-                "timestamp": item.created_at
+                "timestamp": item.created_at.isoformat(),
             }
-            for item in histories
+            for item in text_histories
         ]
 
-        return Response({
-            "chat_id": chat_id,
-            "messages": messages
-        }, status=200)
+        # ---------------- VOICE CHAT ----------------
+        voice_histories = (
+            VoiceConversationHistory.objects
+            .filter(chat_session=chat_session)
+            .order_by("created_at")
+        )
 
+        voice_messages = [
+            {
+                "type": "voice",
+                "transcription": v.user_text,
+                "answer": v.answer_text,
+                "voice_url": v.presigned_url,
+                "timestamp": v.created_at.isoformat(),
+            }
+            for v in voice_histories
+        ]
+
+        # ---------------- COMBINE ----------------
+        combined_messages = sorted(
+            chat_messages + voice_messages,
+            key=lambda x: x["timestamp"]
+        )
+
+        return Response(
+            {
+                "chat_id": chat_id,
+                "total_messages": len(combined_messages),
+                "messages": combined_messages,
+            },
+            status=200,
+        )
 
 
 
@@ -1042,17 +1082,19 @@ class FirebaseGoogleAuthView(APIView):
 
 
 
-
 import requests
+from urllib.parse import urlparse, parse_qs
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 
+from .models import ChatSession
+
 
 class GetSignedURLView(APIView):
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1061,116 +1103,224 @@ class GetSignedURLView(APIView):
             AGENT_ID = settings.ELEVENLABS_AGENT_ID
 
             if not ELEVEN_API_KEY:
-                return Response(
-                    {"error": "ELEVENLABS_API_KEY not set in settings"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
+                return Response({"error": "ELEVENLABS_API_KEY not set in settings"}, status=500)
             if not AGENT_ID:
-                return Response(
-                    {"error": "AGENT_ID not set in settings"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+                return Response({"error": "AGENT_ID not set in settings"}, status=500)
+
+            chat_id = request.query_params.get("chat_id")
+            if not chat_id:
+                return Response({"error": "chat_id is required"}, status=400)
 
             user = request.user
+            try:
+                chat_session = ChatSession.objects.get(id=chat_id, user=user)
+            except ChatSession.DoesNotExist:
+                return Response({"error": "Invalid chat_id or unauthorized"}, status=400)
+
+          
+            role = getattr(user, "role", "user")
             total_time = getattr(user, "total_time", 0)
             plan_type = getattr(user, "plan_type", None)
-            role = getattr(user, "role", "user")
 
-            # ----------- Usage Logic -----------
             if role == "admin":
                 is_unlimited = True
+                remaining_time = "unlimited"
             else:
                 is_unlimited = False
-
+                remaining_time = total_time
                 if total_time <= 0:
                     return Response(
                         {
                             "error": "No remaining usage time. Please upgrade your plan.",
-                            "total_time": total_time,
+                            "remaining_time": total_time,
                             "is_unlimited": False,
                             "role": role,
                             "plan_type": plan_type,
                             "signedUrl": None,
+                            "conversation_id": None,
                         },
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
-            # -------------------- ELEVENLABS REQUEST --------------------
             url = (
                 f"https://api.elevenlabs.io/v1/convai/conversation/get-signed-url"
-                f"?agent_id={AGENT_ID}"
+                f"?agent_id={AGENT_ID}&include_conversation_id=true"
             )
-
-            headers = {
-                "xi-api-key": ELEVEN_API_KEY,
-                "Content-Type": "application/json",
-            }
+            headers = {"xi-api-key": ELEVEN_API_KEY, "Content-Type": "application/json"}
 
             api_response = requests.get(url, headers=headers)
-
             if api_response.status_code != 200:
-                try:
-                    error_data = api_response.json()
-                except Exception:
-                    error_data = {"detail": "Unknown error"}
-
-                # admin response এ total_time থাকবে না
-                if role == "admin":
-                    return Response(
-                        {
-                            "error": f"API error: {api_response.status_code}",
-                            "detail": error_data,
-                            "is_unlimited": is_unlimited,
-                            "role": role,
-                            "plan_type": plan_type,
-                        },
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    )
-
                 return Response(
-                    {
-                        "error": f"API error: {api_response.status_code}",
-                        "detail": error_data,
-                        "total_time": total_time,
-                        "is_unlimited": is_unlimited,
-                        "role": role,
-                        "plan_type": plan_type,
-                    },
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    {"error": f"API error: {api_response.status_code}", "detail": api_response.text},
+                    status=500,
                 )
 
             data = api_response.json()
             signed_url = data.get("signed_url")
 
-            # ----------- Success Response -----------
-            if role == "admin":
-                return Response(
-                    {
-                        "signedUrl": signed_url,
-                        "is_unlimited": True,
-                        "role": role,
-                        "plan_type": plan_type,
-                    },
-                    status=status.HTTP_200_OK,
-                )
+            #  1) Try JSON field first
+            conversation_id = data.get("conversation_id")
+
+            # 2) Fallback: parse from signedUrl query string
+            if not conversation_id and signed_url:
+                qs = parse_qs(urlparse(signed_url).query)
+                conversation_id = (qs.get("conversation_id") or [None])[0]
+
+            #  Save to ChatSession if found
+            if conversation_id and chat_session.conversation_id != conversation_id:
+                chat_session.conversation_id = conversation_id
+                chat_session.save(update_fields=["conversation_id"])
 
             return Response(
                 {
                     "signedUrl": signed_url,
-                    "total_time": total_time,
-                    "is_unlimited": False,
+                    "conversation_id": conversation_id,   #  now will be conv_...
+                    "chat_id": chat_session.id,
+                    "remaining_time": remaining_time,
+                    "is_unlimited": is_unlimited,
                     "role": role,
                     "plan_type": plan_type,
                 },
-                status=status.HTTP_200_OK,
+                status=200,
             )
 
         except Exception as e:
+            return Response({"error": "Failed to generate signed URL", "detail": str(e)}, status=500)
+
+
+
+
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from django.conf import settings
+from django.db import transaction
+
+from elevenlabs import ElevenLabs  # official SDK
+
+from .models import ChatSession, VoiceConversationHistory
+
+
+class SaveVoiceMessageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        chat_id = request.data.get("chat_id")
+        conversation_id = request.data.get("conversation_id")
+
+        if not chat_id or not conversation_id:
+            return Response(
+                {"error": "chat_id and conversation_id are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 1) Validate chat session ownership
+        try:
+            chat_session = ChatSession.objects.get(id=chat_id, user=user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"error": "Invalid chat_id or unauthorized"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2) Fetch conversation details from ElevenLabs
+        # Endpoint returns transcript list with role+message. :contentReference[oaicite:2]{index=2}
+        try:
+            client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY)
+            conv = client.conversational_ai.conversations.get(conversation_id=conversation_id)
+        except Exception as e:
+            return Response(
+                {"error": "Failed to fetch conversation from ElevenLabs", "detail": str(e)},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+
+        # conv may be pydantic model or dict-like; handle both
+        def g(obj, key, default=None):
+            if obj is None:
+                return default
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        conv_status = g(conv, "status")  
+        transcript = g(conv, "transcript", []) or []
+
+        # If still processing or empty transcript
+        if not transcript:
             return Response(
                 {
-                    "error": "Failed to generate signed URL",
-                    "detail": str(e),
+                    "success": False,
+                    "message": "Transcript not available yet (conversation may still be processing).",
+                    "conversation_id": conversation_id,
+                    "status": conv_status,
+                    "saved_rows": 0,
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_200_OK
             )
+
+        # 3) Sync conversation_id to ChatSession
+        if chat_session.conversation_id != conversation_id:
+            chat_session.conversation_id = conversation_id
+            chat_session.save(update_fields=["conversation_id"])
+
+        # 4) Save transcript rows to DB (avoid duplicates)
+        # Strategy: delete old rows for this chat_session+conversation_id, then insert fresh snapshot
+        # (Simple and reliable for "sync" endpoint)
+        with transaction.atomic():
+            VoiceConversationHistory.objects.filter(
+                chat_session=chat_session,
+                conversation_id=conversation_id,
+                user=user
+            ).delete()
+
+            created = 0
+            for turn in transcript:
+                # Docs show items like: {"role":"user", "message":"Hello ..."} :contentReference[oaicite:4]{index=4}
+                role = (g(turn, "role", "") or "").lower()
+                message = (g(turn, "message", "") or "").strip()
+
+                if not message:
+                    continue
+
+                if role == "user":
+                    VoiceConversationHistory.objects.create(
+                        user=user,
+                        chat_session=chat_session,
+                        conversation_id=conversation_id,
+                        user_text=message,
+                        answer_text="",
+                    )
+                    created += 1
+                elif role in ("assistant", "agent"):
+                    VoiceConversationHistory.objects.create(
+                        user=user,
+                        chat_session=chat_session,
+                        conversation_id=conversation_id,
+                        user_text="",
+                        answer_text=message,
+                    )
+                    created += 1
+                else:
+                    # Unknown role -> keep in answer_text
+                    VoiceConversationHistory.objects.create(
+                        user=user,
+                        chat_session=chat_session,
+                        conversation_id=conversation_id,
+                        user_text="",
+                        answer_text=message,
+                    )
+                    created += 1
+
+        return Response(
+            {
+                "success": True,
+                "conversation_id": conversation_id,
+                "status": conv_status,
+                "saved_rows": created,
+            },
+            status=status.HTTP_201_CREATED
+        )
