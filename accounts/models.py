@@ -59,7 +59,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     total_time = models.IntegerField(default=900)  # 10 min = 600 seconds
 
 
-
+    carry_forward_prompts = models.IntegerField(default=0)
     monthly_prompt_count = models.IntegerField(default=0)
     last_reset = models.DateTimeField(default=timezone.now)
     extra_prompts = models.IntegerField(default=0)

@@ -800,11 +800,15 @@ import stripe
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.db import transaction
 from accounts.models import User
 from datetime import datetime, timezone as dt_timezone
 from .models import ProcessedStripeEvent
 
+
 stripe.api_key = settings.STRIPE_SECRET_KEY
+
+PLAN_LIMIT = {"freebie": 20, "premium": 50}
 
 
 def safe_ts_to_dt(ts):
@@ -814,48 +818,96 @@ def safe_ts_to_dt(ts):
     return datetime.fromtimestamp(ts, tz=dt_timezone.utc)
 
 
+def get_user_by_email(email):
+    if not email:
+        return None
+    return User.objects.filter(email__iexact=email).first()
+
+
 @csrf_exempt
 def stripe_webhook(request):
+    print("webbhok called brooo xxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+
     payload = request.body
     sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
     endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, endpoint_secret
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-
-    
+    # SAME EVENT retry হলে double-add আটকাবে
     if ProcessedStripeEvent.objects.filter(stripe_event_id=event["id"]).exists():
         return JsonResponse({"status": "already processed"}, status=200)
 
     print(f"[Stripe] Event received → {event['type']}")
 
-   
-    def get_user(email):
-        if not email:
-            return None
-        return User.objects.filter(email__iexact=email).first()
-
+    # =========================
+    # checkout.session.completed
+    # =========================
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         email = session.get("customer_email")
-        user = get_user(email)
 
-        if user:
+        # fallback: customer থেকে email
+        if not email and session.get("customer"):
+            try:
+                customer = stripe.Customer.retrieve(session["customer"])
+                email = customer.get("email")
+            except Exception:
+                email = None
+
+        user = get_user_by_email(email)
+
+        if not user:
+            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
+            return JsonResponse({"status": "ok"}, status=200)
+
+        with transaction.atomic():
+          
+            current_plan_base = PLAN_LIMIT.get(user.plan_type, PLAN_LIMIT["freebie"])
+            current_carry = getattr(user, "carry_forward_prompts", 0) or 0
+            current_topup = getattr(user, "extra_prompts", 0) or 0
+
+            current_total_limit = current_plan_base + current_carry + current_topup
+            current_used = user.monthly_prompt_count or 0
+
+           
+            remaining = max(current_total_limit - current_used, 0)
+
+            # 3) carry_forward_prompts এ remaining set
+            user.carry_forward_prompts = remaining
+
+            #  4) usage reset
+            user.monthly_prompt_count = 0
+
+            #   purchase এ +50 topup add
+            user.extra_prompts = current_topup + 50
+
+            # premium status
             user.plan_type = "premium"
             user.is_plan_paid = True
-            user.extra_prompts += 50
-            user.total_time += 3600
-            user.save(update_fields=["plan_type", "is_plan_paid","total_time"])
-            print(f"[Stripe] User upgraded → {user.email}")
+
+            # optional voice time add
+            user.total_time = (user.total_time or 0) + 3600
+
+            user.save(update_fields=[
+                "plan_type",
+                "is_plan_paid",
+                "total_time",
+                "extra_prompts",
+                "carry_forward_prompts",
+                "monthly_prompt_count",
+            ])
+
+            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
 
         return JsonResponse({"status": "success"}, status=200)
 
-
+    # =========================
+    # customer.subscription.created
+    # =========================
     if event["type"] == "customer.subscription.created":
         sub = event["data"]["object"]
 
@@ -867,17 +919,21 @@ def stripe_webhook(request):
         print(f"Item current_period_start: {item.get('current_period_start')}")
         print(f"Item current_period_end: {item.get('current_period_end')}")
 
-        customer = stripe.Customer.retrieve(sub["customer"])
-        email = customer.get("email")
-        user = get_user(email)
+        try:
+            customer = stripe.Customer.retrieve(sub["customer"])
+            email = customer.get("email")
+        except Exception:
+            email = None
+
+        user = get_user_by_email(email)
 
         print(f"Matched User: {user}")
 
         if not user:
             print("No matching user found for subscription event.")
             print("==== DEBUG END ====\n")
+            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
             return JsonResponse({"status": "ok"}, status=200)
-
 
         start = safe_ts_to_dt(item.get("current_period_start"))
         end = safe_ts_to_dt(item.get("current_period_end"))
@@ -889,26 +945,36 @@ def stripe_webhook(request):
         user.is_plan_paid = True
         user.plan_start_date = start
         user.plan_end_date = end
+
         user.save(update_fields=[
             "plan_type",
             "is_plan_paid",
             "plan_start_date",
-            "plan_end_date"
+            "plan_end_date",
         ])
+
+        ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
 
         print(f"[Stripe] Subscription dates saved → {user.email}")
         print("==== DEBUG END ====\n")
-
         return JsonResponse({"status": "success"}, status=200)
 
-
+    # =========================
+    # customer.subscription.deleted
+    # =========================
     if event["type"] == "customer.subscription.deleted":
         sub = event["data"]["object"]
-        customer = stripe.Customer.retrieve(sub["customer"])
-        email = customer.get("email")
-        user = get_user(email)
+
+        try:
+            customer = stripe.Customer.retrieve(sub["customer"])
+            email = customer.get("email")
+        except Exception:
+            email = None
+
+        user = get_user_by_email(email)
 
         if not user:
+            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
             return JsonResponse({"status": "ok"}, status=200)
 
         user.plan_type = "freebie"
@@ -916,11 +982,14 @@ def stripe_webhook(request):
         user.plan_end_date = datetime.now(tz=dt_timezone.utc)
         user.save(update_fields=["plan_type", "is_plan_paid", "plan_end_date"])
 
-        print(f"[Stripe] Subscription cancelled → {user.email}")
+        ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
 
+        print(f"[Stripe] Subscription cancelled → {user.email}")
         return JsonResponse({"status": "success"}, status=200)
 
- 
+    # =========================
+    # invoice events
+    # =========================
     if event["type"] in [
         "invoice.created",
         "invoice.finalized",
@@ -928,16 +997,12 @@ def stripe_webhook(request):
         "invoice.payment_succeeded",
     ]:
         print(f"[Stripe] Invoice event handled → {event['type']}")
+        ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
         return JsonResponse({"status": "ok"}, status=200)
 
-
     print(f"[Stripe] Unhandled event → {event['type']}")
+    ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
     return JsonResponse({"status": "ignored"}, status=200)
-
-
-
-
-
 
 
 

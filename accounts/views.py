@@ -535,15 +535,15 @@ class UserUpdateDeleteAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+
 class UserLimitsOverviewView(APIView):
     """
     GET /auth/user-limits/
     Returns the logged-in user's own pending text_prompts and voice_limit.
-
-    Limits (from utils_permissions.py):
-        freebie : 25 prompts / month
-        premium : 50 prompts / month  + extra_prompts top-ups
-    Voice     : total_time in seconds (default 600 = 10 min)
     """
     permission_classes = [IsAuthenticated]
 
@@ -553,8 +553,10 @@ class UserLimitsOverviewView(APIView):
         user = request.user
         user.reset_prompt_count_if_needed()
 
-        base            = self.BASE_LIMIT.get(user.plan_type, 20)
-        total_allowed   = base + user.extra_prompts
+        base = self.BASE_LIMIT.get(user.plan_type, 20)
+        carry = getattr(user, "carry_forward_prompts", 0) or 0
+
+        total_allowed = base + carry + user.extra_prompts
         pending_prompts = max(total_allowed - user.monthly_prompt_count, 0)
 
         return Response({
