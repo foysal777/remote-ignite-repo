@@ -19,7 +19,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import Profile
 from .serializers import ProfileSerializer
-
 from django.core.cache import cache
 from rest_framework import generics, status
 from rest_framework.response import Response
