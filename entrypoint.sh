@@ -1,19 +1,22 @@
 #!/bin/sh
 
-echo "⏳ Waiting for PostgreSQL..."
+echo " Waiting for PostgreSQL..."
 
 while ! nc -z postgres 5432; do
   sleep 2
 done
 
-echo "✅ PostgreSQL started"
+echo " PostgreSQL started"
 
-echo "🚀 Running migrations..."
+echo " Making migrations..."
+python manage.py makemigrations --noinput
+
+echo " Running migrations..."
 python manage.py migrate --noinput
 
-echo "📦 Collecting static files..."
+echo " Collecting static files..."
 python manage.py collectstatic --noinput
 
-echo "🔥 Starting Gunicorn..."
+echo " Starting Gunicorn..."
 
 exec "$@"
