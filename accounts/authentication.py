@@ -43,25 +43,26 @@ class CookieJWTAuthentication(JWTAuthentication):
                     raise InvalidToken(e.args[0])
 
         # ── 2. Fall back to the access cookie ─────────────────────────────
-        raw_token = request.COOKIES.get(ACCESS_COOKIE_NAME)
+        # ── 2. Fall back to the access cookie ─────────────────────────────
+    raw_token = request.COOKIES.get(ACCESS_COOKIE_NAME)
 
-        # Also allow a value that was injected by the refresh middleware
-        # (stored on the request object before the view ran)
-        if raw_token is None:
-            raw_token = getattr(request, "_refreshed_access", None)
+    if raw_token is None:
+        raw_token = getattr(request, "_refreshed_access", None)
 
-        if raw_token is None:
-            return None  # anonymous request
+    if raw_token is None:
+        return None  # anonymous request
 
-        try:
-            validated_token = self.get_validated_token(raw_token.encode()
-                                                        if isinstance(raw_token, str)
-                                                        else raw_token)
-            return self.get_user(validated_token), validated_token
-        except TokenError as e:
-            # Token is present but invalid/expired — raise so the client
-            # gets a 401 rather than silently treating them as anonymous.
-            raise AuthenticationFailed(str(e))
+    try:
+        validated_token = self.get_validated_token(
+            raw_token.encode() if isinstance(raw_token, str) else raw_token
+        )
+        return self.get_user(validated_token), validated_token
+    except TokenError:
+        # cookie token invalid/expired → treat as anonymous
+        return None
+    except AuthenticationFailed:
+        #  user_not_found (user missing) → treat as anonymous
+        return None
 
 
 
