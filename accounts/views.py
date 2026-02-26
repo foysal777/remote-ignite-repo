@@ -29,8 +29,11 @@ from .serializers import RegisterSerializer
 from .utils import generate_otp, send_otp_email
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from .cookie_utils import set_auth_cookies, delete_auth_cookies
+from rest_framework.permissions import AllowAny
+
 
 class RegisterView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
 
     def post(self, request, *args, **kwargs):
@@ -77,6 +80,7 @@ from .models import User
 
 
 class VerifyOTPView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
     serializer_class = OTPSerializer
 
     def post(self, request, *args, **kwargs):
@@ -146,6 +150,7 @@ class VerifyOTPView(generics.GenericAPIView):
 
 
 class LoginView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
     serializer_class = LoginSerializer
 
     def post(self, request, *args, **kwargs):
