@@ -857,7 +857,7 @@ def stripe_webhook(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-    # ✅ idempotency: race-condition safe
+    #  idempotency: race-condition safe
     try:
         with transaction.atomic():
             ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
@@ -896,17 +896,17 @@ def stripe_webhook(request):
 
             first_time_premium = not getattr(user, "has_ever_been_premium", False)
 
-            # ✅ plan set
+            #  plan set
             user.plan_type = "premium"
             user.is_plan_paid = True
 
-            # ✅ dates (optional)
+            # dates (optional)
             if period_start:
                 user.plan_start_date = period_start
             if period_end:
                 user.plan_end_date = period_end
 
-            # ✅ prompt rules:
+            #  prompt rules:
             if first_time_premium:
                 # 1st time: carry add হবে না
                 user.carry_forward_prompts = 0
@@ -915,8 +915,9 @@ def stripe_webhook(request):
                 # 2nd time+: আগের remaining carry হবে
                 user.carry_forward_prompts = remaining
 
-            # ✅ usage reset
+            # usage reset
             user.monthly_prompt_count = 0
+            user.total_time = (user.total_time or 0) + 3600
 
             # NOTE:
             # তুমি বলেছো "premium কিনলে prompt হবে 50"
@@ -933,6 +934,7 @@ def stripe_webhook(request):
                 "carry_forward_prompts",
                 "monthly_prompt_count",
                 "has_ever_been_premium",
+                "total_time", 
             ])
 
         return JsonResponse({"status": "success"}, status=200)
