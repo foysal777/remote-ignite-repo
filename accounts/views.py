@@ -535,6 +535,7 @@ class UserUpdateDeleteAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 
 
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -553,22 +554,28 @@ class UserLimitsOverviewView(APIView):
         user = request.user
         user.reset_prompt_count_if_needed()
 
-        base = self.BASE_LIMIT.get(user.plan_type, 20)
+        base = self.BASE_LIMIT.get(getattr(user, "plan_type", "freebie"), 20)
         carry = getattr(user, "carry_forward_prompts", 0) or 0
+        extra = getattr(user, "extra_prompts", 0) or 0
+        used = getattr(user, "monthly_prompt_count", 0) or 0
+        total_time = getattr(user, "total_time", 0) or 0
 
-        total_allowed = base + carry + user.extra_prompts
-        pending_prompts = max(total_allowed - user.monthly_prompt_count, 0)
+        total_allowed = max(base + carry + extra, 0)
+        pending_prompts = max(total_allowed - used, 0)
+
+        plan_end = getattr(user, "plan_end_date", None)
+        plan_end_value = plan_end.isoformat() if plan_end else None
 
         return Response({
             "email":           user.email,
             "plan_type":       user.plan_type,
             "base_limit":      base,
-            "extra_prompts":   user.extra_prompts,
+            "extra_prompts":   extra,
             "total_allowed":   total_allowed,
-            "used_prompts":    user.monthly_prompt_count,
+            "used_prompts":    used,
             "pending_prompts": pending_prompts,
-            "voice_limit_sec": user.total_time,
-            "voice_limit_min": user.total_time / 60,
-            "is_plan_paid":    user.is_plan_paid,
-            "plan_end_date":   user.plan_end_date,
+            "voice_limit_sec": total_time,
+            "voice_limit_min": round(total_time / 60, 2),
+            "is_plan_paid":    bool(getattr(user, "is_plan_paid", False)),
+            "plan_end_date":   plan_end_value,
         }, status=status.HTTP_200_OK)

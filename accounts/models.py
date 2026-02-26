@@ -63,6 +63,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     monthly_prompt_count = models.IntegerField(default=0)
     last_reset = models.DateTimeField(default=timezone.now)
     extra_prompts = models.IntegerField(default=0)
+    has_ever_been_premium = models.BooleanField(default=False)
 
     objects = UserManager()
 

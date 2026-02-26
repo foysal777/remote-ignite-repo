@@ -800,11 +800,10 @@ import stripe
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from accounts.models import User
 from datetime import datetime, timezone as dt_timezone
 from .models import ProcessedStripeEvent
-
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -812,7 +811,6 @@ PLAN_LIMIT = {"freebie": 20, "premium": 50}
 
 
 def safe_ts_to_dt(ts):
-    """Safely convert timestamp (int) to timezone-aware datetime."""
     if not ts:
         return None
     return datetime.fromtimestamp(ts, tz=dt_timezone.utc)
@@ -824,10 +822,32 @@ def get_user_by_email(email):
     return User.objects.filter(email__iexact=email).first()
 
 
+def get_user_by_customer_id(customer_id: str):
+    """Stripe customer id দিয়ে user খোঁজা (email fallback)"""
+    if not customer_id:
+        return None, None
+    try:
+        customer = stripe.Customer.retrieve(customer_id)
+        email = customer.get("email")
+        return get_user_by_email(email), email
+    except Exception:
+        return None, None
+
+
+def compute_remaining_prompts(user: User) -> int:
+    """
+    Remaining = (plan_base + carry + extra_topup) - used
+    তোমার existing structure অনুযায়ী।
+    """
+    plan_base = PLAN_LIMIT.get(user.plan_type, PLAN_LIMIT["freebie"])
+    carry = getattr(user, "carry_forward_prompts", 0) or 0
+    extra = getattr(user, "extra_prompts", 0) or 0
+    used = user.monthly_prompt_count or 0
+    return max((plan_base + carry + extra) - used, 0)
+
+
 @csrf_exempt
 def stripe_webhook(request):
-    print("webbhok called brooo xxxxxxxxxxxxxxxxxxxxxxxxxxxx")
-
     payload = request.body
     sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
     endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
@@ -837,144 +857,95 @@ def stripe_webhook(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-    # SAME EVENT retry হলে double-add আটকাবে
-    if ProcessedStripeEvent.objects.filter(stripe_event_id=event["id"]).exists():
+    # ✅ idempotency: race-condition safe
+    try:
+        with transaction.atomic():
+            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
+    except IntegrityError:
         return JsonResponse({"status": "already processed"}, status=200)
 
-    print(f"[Stripe] Event received → {event['type']}")
+    event_type = event["type"]
+    obj = event["data"]["object"]
 
     # =========================
-    # checkout.session.completed
+    # invoice.payment_succeeded (MAIN LOGIC)
     # =========================
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        email = session.get("customer_email")
-
-        # fallback: customer থেকে email
-        if not email and session.get("customer"):
-            try:
-                customer = stripe.Customer.retrieve(session["customer"])
-                email = customer.get("email")
-            except Exception:
-                email = None
-
-        user = get_user_by_email(email)
+    if event_type in ["invoice.payment_succeeded", "invoice.paid"]:
+        customer_id = obj.get("customer")
+        user, email = get_user_by_customer_id(customer_id)
 
         if not user:
-            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
             return JsonResponse({"status": "ok"}, status=200)
 
+        # invoice থেকে subscription period বের করার চেষ্টা
+        # invoice.lines.data[0].period.start/end সাধারণত থাকে
+        period_start = None
+        period_end = None
+        try:
+            lines = obj.get("lines", {}).get("data", [])
+            if lines:
+                period = lines[0].get("period") or {}
+                period_start = safe_ts_to_dt(period.get("start"))
+                period_end = safe_ts_to_dt(period.get("end"))
+        except Exception:
+            pass
+
         with transaction.atomic():
-          
-            current_plan_base = PLAN_LIMIT.get(user.plan_type, PLAN_LIMIT["freebie"])
-            current_carry = getattr(user, "carry_forward_prompts", 0) or 0
-            current_topup = getattr(user, "extra_prompts", 0) or 0
+            # আগের plan অনুযায়ী remaining বের করি (carry-এর জন্য)
+            remaining = compute_remaining_prompts(user)
 
-            current_total_limit = current_plan_base + current_carry + current_topup
-            current_used = user.monthly_prompt_count or 0
+            first_time_premium = not getattr(user, "has_ever_been_premium", False)
 
-           
-            remaining = max(current_total_limit - current_used, 0)
-
-            # 3) carry_forward_prompts এ remaining set
-            user.carry_forward_prompts = remaining
-
-            #  4) usage reset
-            user.monthly_prompt_count = 0
-
-            #   purchase এ +50 topup add
-            user.extra_prompts = current_topup + 50
-
-            # premium status
+            # ✅ plan set
             user.plan_type = "premium"
             user.is_plan_paid = True
 
-            # optional voice time add
-            user.total_time = (user.total_time or 0) + 3600
+            # ✅ dates (optional)
+            if period_start:
+                user.plan_start_date = period_start
+            if period_end:
+                user.plan_end_date = period_end
+
+            # ✅ prompt rules:
+            if first_time_premium:
+                # 1st time: carry add হবে না
+                user.carry_forward_prompts = 0
+                user.has_ever_been_premium = True
+            else:
+                # 2nd time+: আগের remaining carry হবে
+                user.carry_forward_prompts = remaining
+
+            # ✅ usage reset
+            user.monthly_prompt_count = 0
+
+            # NOTE:
+            # তুমি বলেছো "premium কিনলে prompt হবে 50"
+            # সেটা plan_base (PLAN_LIMIT['premium']=50) থেকেই আসবে।
+            # তাই এখানে extra_prompts += 50 করা হচ্ছে না।
+            #
+            # যদি তুমি আলাদা "topup purchase" বানাতে চাও, সেটা আলাদা price/product দিয়ে handle করবে।
 
             user.save(update_fields=[
                 "plan_type",
                 "is_plan_paid",
-                "total_time",
-                "extra_prompts",
+                "plan_start_date",
+                "plan_end_date",
                 "carry_forward_prompts",
                 "monthly_prompt_count",
+                "has_ever_been_premium",
             ])
 
-            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
-
         return JsonResponse({"status": "success"}, status=200)
 
     # =========================
-    # customer.subscription.created
+    # customer.subscription.deleted (cancel)
     # =========================
-    if event["type"] == "customer.subscription.created":
-        sub = event["data"]["object"]
-
-        print("\n==== DEBUG: subscription.created START ====")
-        print(f"Root current_period_start: {sub.get('current_period_start')}")
-        print(f"Root current_period_end: {sub.get('current_period_end')}")
-
-        item = sub["items"]["data"][0]
-        print(f"Item current_period_start: {item.get('current_period_start')}")
-        print(f"Item current_period_end: {item.get('current_period_end')}")
-
-        try:
-            customer = stripe.Customer.retrieve(sub["customer"])
-            email = customer.get("email")
-        except Exception:
-            email = None
-
-        user = get_user_by_email(email)
-
-        print(f"Matched User: {user}")
+    if event_type == "customer.subscription.deleted":
+        sub = obj
+        customer_id = sub.get("customer")
+        user, email = get_user_by_customer_id(customer_id)
 
         if not user:
-            print("No matching user found for subscription event.")
-            print("==== DEBUG END ====\n")
-            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
-            return JsonResponse({"status": "ok"}, status=200)
-
-        start = safe_ts_to_dt(item.get("current_period_start"))
-        end = safe_ts_to_dt(item.get("current_period_end"))
-
-        print(f"Converted start date → {start}")
-        print(f"Converted end date → {end}")
-
-        user.plan_type = "premium"
-        user.is_plan_paid = True
-        user.plan_start_date = start
-        user.plan_end_date = end
-
-        user.save(update_fields=[
-            "plan_type",
-            "is_plan_paid",
-            "plan_start_date",
-            "plan_end_date",
-        ])
-
-        ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
-
-        print(f"[Stripe] Subscription dates saved → {user.email}")
-        print("==== DEBUG END ====\n")
-        return JsonResponse({"status": "success"}, status=200)
-
-    # =========================
-    # customer.subscription.deleted
-    # =========================
-    if event["type"] == "customer.subscription.deleted":
-        sub = event["data"]["object"]
-
-        try:
-            customer = stripe.Customer.retrieve(sub["customer"])
-            email = customer.get("email")
-        except Exception:
-            email = None
-
-        user = get_user_by_email(email)
-
-        if not user:
-            ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
             return JsonResponse({"status": "ok"}, status=200)
 
         user.plan_type = "freebie"
@@ -982,30 +953,12 @@ def stripe_webhook(request):
         user.plan_end_date = datetime.now(tz=dt_timezone.utc)
         user.save(update_fields=["plan_type", "is_plan_paid", "plan_end_date"])
 
-        ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
-
-        print(f"[Stripe] Subscription cancelled → {user.email}")
         return JsonResponse({"status": "success"}, status=200)
 
     # =========================
-    # invoice events
+    # Other events (ignored)
     # =========================
-    if event["type"] in [
-        "invoice.created",
-        "invoice.finalized",
-        "invoice.paid",
-        "invoice.payment_succeeded",
-    ]:
-        print(f"[Stripe] Invoice event handled → {event['type']}")
-        ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
-        return JsonResponse({"status": "ok"}, status=200)
-
-    print(f"[Stripe] Unhandled event → {event['type']}")
-    ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
-    return JsonResponse({"status": "ignored"}, status=200)
-
-
-
+    return JsonResponse({"status": "ignored", "event": event_type}, status=200)
 
 
 import stripe
