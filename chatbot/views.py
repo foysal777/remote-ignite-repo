@@ -801,13 +801,15 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, IntegrityError
-from accounts.models import User
 from datetime import datetime, timezone as dt_timezone
-from .models import ProcessedStripeEvent
+
+from accounts.models import User
+from .models import ProcessedStripeEvent, ProcessedStripeInvoice
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 PLAN_LIMIT = {"freebie": 20, "premium": 50}
+VOICE_BASE_SEC = 3600
 
 
 def safe_ts_to_dt(ts):
@@ -823,7 +825,9 @@ def get_user_by_email(email):
 
 
 def get_user_by_customer_id(customer_id: str):
-    """Stripe customer id দিয়ে user খোঁজা (email fallback)"""
+    """
+    Stripe customer id -> customer.email -> user
+    """
     if not customer_id:
         return None, None
     try:
@@ -836,14 +840,29 @@ def get_user_by_customer_id(customer_id: str):
 
 def compute_remaining_prompts(user: User) -> int:
     """
-    Remaining = (plan_base + carry + extra_topup) - used
-    তোমার existing structure অনুযায়ী।
+    Remaining prompts from CURRENT cycle before reset.
     """
-    plan_base = PLAN_LIMIT.get(user.plan_type, PLAN_LIMIT["freebie"])
+    plan_base = PLAN_LIMIT.get(getattr(user, "plan_type", "freebie"), PLAN_LIMIT["freebie"])
     carry = getattr(user, "carry_forward_prompts", 0) or 0
     extra = getattr(user, "extra_prompts", 0) or 0
-    used = user.monthly_prompt_count or 0
+    used = getattr(user, "monthly_prompt_count", 0) or 0
     return max((plan_base + carry + extra) - used, 0)
+
+
+def extract_period_from_invoice(invoice_obj):
+    """
+    invoice.lines.data[0].period.start/end থেকে period বের করার চেষ্টা
+    """
+    try:
+        lines = invoice_obj.get("lines", {}).get("data", [])
+        if not lines:
+            return None, None
+        period = lines[0].get("period") or {}
+        start = safe_ts_to_dt(period.get("start"))
+        end = safe_ts_to_dt(period.get("end"))
+        return start, end
+    except Exception:
+        return None, None
 
 
 @csrf_exempt
@@ -857,7 +876,7 @@ def stripe_webhook(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-    #  idempotency: race-condition safe
+    # ✅ event-level idempotency (race safe)
     try:
         with transaction.atomic():
             ProcessedStripeEvent.objects.create(stripe_event_id=event["id"])
@@ -867,64 +886,61 @@ def stripe_webhook(request):
     event_type = event["type"]
     obj = event["data"]["object"]
 
-    # =========================
-    # invoice.payment_succeeded (MAIN LOGIC)
-    # =========================
+    print(f"[Stripe] Event received → {event_type}")
+
+    # ==========================================================
+    # ✅ MAIN CREDITING LOGIC (only invoice paid/succeeded)
+    # ==========================================================
     if event_type in ["invoice.payment_succeeded", "invoice.paid"]:
-        customer_id = obj.get("customer")
-        user, email = get_user_by_customer_id(customer_id)
+        invoice = obj
+        invoice_id = invoice.get("id")
+
+        # ✅ invoice-level dedupe (prevents double credit across different event types)
+        try:
+            with transaction.atomic():
+                ProcessedStripeInvoice.objects.create(stripe_invoice_id=invoice_id)
+        except IntegrityError:
+            return JsonResponse({"status": "already credited"}, status=200)
+
+        customer_id = invoice.get("customer")
+        user, _email = get_user_by_customer_id(customer_id)
 
         if not user:
             return JsonResponse({"status": "ok"}, status=200)
 
-        # invoice থেকে subscription period বের করার চেষ্টা
-        # invoice.lines.data[0].period.start/end সাধারণত থাকে
-        period_start = None
-        period_end = None
-        try:
-            lines = obj.get("lines", {}).get("data", [])
-            if lines:
-                period = lines[0].get("period") or {}
-                period_start = safe_ts_to_dt(period.get("start"))
-                period_end = safe_ts_to_dt(period.get("end"))
-        except Exception:
-            pass
+        period_start, period_end = extract_period_from_invoice(invoice)
 
         with transaction.atomic():
-            # আগের plan অনুযায়ী remaining বের করি (carry-এর জন্য)
-            remaining = compute_remaining_prompts(user)
+            # capture previous remaining BEFORE reset
+            prev_remaining_prompts = compute_remaining_prompts(user)
+            prev_remaining_voice = getattr(user, "total_time", 0) or 0
 
-            first_time_premium = not getattr(user, "has_ever_been_premium", False)
+            first_time_premium = not bool(getattr(user, "has_ever_been_premium", False))
 
-            #  plan set
+            # plan set
             user.plan_type = "premium"
             user.is_plan_paid = True
 
-            # dates (optional)
             if period_start:
                 user.plan_start_date = period_start
             if period_end:
                 user.plan_end_date = period_end
 
-            #  prompt rules:
+            # ✅ Prompt carry rules
             if first_time_premium:
-                # 1st time: carry add হবে না
                 user.carry_forward_prompts = 0
                 user.has_ever_been_premium = True
             else:
-                # 2nd time+: আগের remaining carry হবে
-                user.carry_forward_prompts = remaining
+                user.carry_forward_prompts = prev_remaining_prompts
 
-            # usage reset
+            # ✅ reset usage for new cycle
             user.monthly_prompt_count = 0
-            user.total_time = (user.total_time or 0) + 3600
 
-            # NOTE:
-            # তুমি বলেছো "premium কিনলে prompt হবে 50"
-            # সেটা plan_base (PLAN_LIMIT['premium']=50) থেকেই আসবে।
-            # তাই এখানে extra_prompts += 50 করা হচ্ছে না।
-            #
-            # যদি তুমি আলাদা "topup purchase" বানাতে চাও, সেটা আলাদা price/product দিয়ে handle করবে।
+            # ✅ Voice rules (SET, not +=)
+            if first_time_premium:
+                user.total_time = VOICE_BASE_SEC
+            else:
+                user.total_time = VOICE_BASE_SEC + prev_remaining_voice
 
             user.save(update_fields=[
                 "plan_type",
@@ -934,19 +950,65 @@ def stripe_webhook(request):
                 "carry_forward_prompts",
                 "monthly_prompt_count",
                 "has_ever_been_premium",
-                "total_time", 
+                "total_time",
             ])
 
         return JsonResponse({"status": "success"}, status=200)
 
-    # =========================
-    # customer.subscription.deleted (cancel)
-    # =========================
+    # ==========================================================
+    # checkout.session.completed (NO CREDIT here)
+    # (optional: just acknowledge; credit happens on invoice)
+    # ==========================================================
+    if event_type == "checkout.session.completed":
+        # শুধু ack; credit invoice event এ হবে
+        return JsonResponse({"status": "ok"}, status=200)
+
+    # ==========================================================
+    # subscription.created (dates only, no credit)
+    # ==========================================================
+    if event_type == "customer.subscription.created":
+        sub = obj
+
+        user, _email = get_user_by_customer_id(sub.get("customer"))
+        if not user:
+            return JsonResponse({"status": "ok"}, status=200)
+
+        # try root period first
+        start = safe_ts_to_dt(sub.get("current_period_start"))
+        end = safe_ts_to_dt(sub.get("current_period_end"))
+
+        # fallback: item period
+        try:
+            item = sub.get("items", {}).get("data", [None])[0]
+            if item:
+                start = start or safe_ts_to_dt(item.get("current_period_start"))
+                end = end or safe_ts_to_dt(item.get("current_period_end"))
+        except Exception:
+            pass
+
+        user.plan_type = "premium"
+        user.is_plan_paid = True
+        if start:
+            user.plan_start_date = start
+        if end:
+            user.plan_end_date = end
+
+        user.save(update_fields=[
+            "plan_type",
+            "is_plan_paid",
+            "plan_start_date",
+            "plan_end_date",
+        ])
+
+        return JsonResponse({"status": "success"}, status=200)
+
+    # ==========================================================
+    # subscription.deleted (downgrade)
+    # ==========================================================
     if event_type == "customer.subscription.deleted":
         sub = obj
-        customer_id = sub.get("customer")
-        user, email = get_user_by_customer_id(customer_id)
 
+        user, _email = get_user_by_customer_id(sub.get("customer"))
         if not user:
             return JsonResponse({"status": "ok"}, status=200)
 
@@ -957,10 +1019,15 @@ def stripe_webhook(request):
 
         return JsonResponse({"status": "success"}, status=200)
 
-    # =========================
-    # Other events (ignored)
-    # =========================
-    return JsonResponse({"status": "ignored", "event": event_type}, status=200)
+    # ==========================================================
+    # invoice.created/finalized etc -> ack only
+    # ==========================================================
+    if event_type in ["invoice.created", "invoice.finalized"]:
+        return JsonResponse({"status": "ok"}, status=200)
+
+    print(f"[Stripe] Unhandled event → {event_type}")
+    return JsonResponse({"status": "ignored"}, status=200)
+
 
 
 import stripe
