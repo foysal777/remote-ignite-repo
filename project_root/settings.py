@@ -142,12 +142,20 @@ CORS_ALLOWED_ORIGINS = [
     "https://sensesai.app",
 ]
 
-CORS_ALLOW_HEADERS = list(default_headers) + [
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
     "authorization",
     "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
     "x-csrftoken",
-    "ngrok-skip-browser-warning",
+    "x-requested-with",
+    "ngrok-skip-browser-warning",  # required by the frontend when using ngrok
 ]
+
 
 CORS_ALLOW_METHODS = [
     "GET",
