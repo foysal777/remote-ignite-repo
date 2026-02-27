@@ -17,14 +17,25 @@ from django.conf import settings
 
 
 # ── defaults ──────────────────────────────────────────────────────────────────
-ACCESS_NAME    = getattr(settings, "JWT_COOKIE_ACCESS_NAME",    "access")
-REFRESH_NAME   = getattr(settings, "JWT_COOKIE_REFRESH_NAME",   "refresh")
-SECURE         = getattr(settings, "JWT_COOKIE_SECURE",         False)
-HTTPONLY       = getattr(settings, "JWT_COOKIE_HTTPONLY",        True)
-SAMESITE       = getattr(settings, "JWT_COOKIE_SAMESITE",        "Lax")
-ACCESS_MAX_AGE = getattr(settings, "JWT_COOKIE_ACCESS_MAX_AGE",  120)
-REFRESH_MAX_AGE= getattr(settings, "JWT_COOKIE_REFRESH_MAX_AGE", 7 * 24 * 3600)
+# ACCESS_NAME    = getattr(settings, "JWT_COOKIE_ACCESS_NAME",    "access")
+# REFRESH_NAME   = getattr(settings, "JWT_COOKIE_REFRESH_NAME",   "refresh")
+# SECURE         = getattr(settings, "JWT_COOKIE_SECURE",         False)
+# HTTPONLY       = getattr(settings, "JWT_COOKIE_HTTPONLY",        False)
+# SAMESITE       = getattr(settings, "JWT_COOKIE_SAMESITE",        "Lax")
+# ACCESS_MAX_AGE = getattr(settings, "JWT_COOKIE_ACCESS_MAX_AGE",  120)
+# REFRESH_MAX_AGE= getattr(settings, "JWT_COOKIE_REFRESH_MAX_AGE", 7 * 24 * 3600)
 
+ACCESS_NAME     = getattr(settings, "JWT_COOKIE_ACCESS_NAME",    "access")
+REFRESH_NAME    = getattr(settings, "JWT_COOKIE_REFRESH_NAME",   "refresh")
+SECURE          = getattr(settings, "JWT_COOKIE_SECURE",         False)
+
+# Separate HttpOnly flags for access and refresh cookies
+ACCESS_HTTPONLY = getattr(settings, "JWT_COOKIE_ACCESS_HTTPONLY", False)
+REFRESH_HTTPONLY= getattr(settings, "JWT_COOKIE_REFRESH_HTTPONLY", True)
+
+SAMESITE        = getattr(settings, "JWT_COOKIE_SAMESITE",       "Lax")
+ACCESS_MAX_AGE  = getattr(settings, "JWT_COOKIE_ACCESS_MAX_AGE",  120)
+REFRESH_MAX_AGE = getattr(settings, "JWT_COOKIE_REFRESH_MAX_AGE", 7 * 24 * 3600)
 
 def set_auth_cookies(response, *, access_token: str, refresh_token: str) -> None:
     """
@@ -35,7 +46,8 @@ def set_auth_cookies(response, *, access_token: str, refresh_token: str) -> None
         key      = ACCESS_NAME,
         value    = access_token,
         max_age  = ACCESS_MAX_AGE,
-        httponly = HTTPONLY,
+        # httponly = HTTPONLY,
+        httponly = ACCESS_HTTPONLY,
         secure   = SECURE,
         samesite = SAMESITE,
     )
@@ -43,7 +55,7 @@ def set_auth_cookies(response, *, access_token: str, refresh_token: str) -> None
         key      = REFRESH_NAME,
         value    = refresh_token,
         max_age  = REFRESH_MAX_AGE,
-        httponly = HTTPONLY,
+        httponly = REFRESH_HTTPONLY,
         secure   = SECURE,
         samesite = SAMESITE,
     )
@@ -56,12 +68,21 @@ def delete_auth_cookies(response) -> None:
     Django versions) and mirrors the same flags so the browser matches the
     existing cookie and removes it.
     """
-    for name in (ACCESS_NAME, REFRESH_NAME):
-        response.set_cookie(
-            key      = name,
-            value    = '',
-            max_age  = 0,
-            httponly = HTTPONLY,
-            secure   = SECURE,
-            samesite = SAMESITE,
-        )
+    # for name in (ACCESS_NAME, REFRESH_NAME):
+    response.set_cookie(
+        key      = ACCESS_NAME,
+        value    = '',
+        max_age  = 0,
+        httponly = ACCESS_HTTPONLY,
+        secure   = SECURE,
+        samesite = SAMESITE,
+    )
+    response.set_cookie(
+        key      = REFRESH_NAME,
+        value    = '',
+        max_age  = 0,
+        httponly = REFRESH_HTTPONLY,
+        secure   = SECURE,
+        samesite = SAMESITE,
+    )
+

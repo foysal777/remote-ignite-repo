@@ -84,7 +84,7 @@ from datetime import timedelta
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=7),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),     
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),     
     "ROTATE_REFRESH_TOKENS": True,                 
     "BLACKLIST_AFTER_ROTATION": True,                
     "ALGORITHM": "HS256",
@@ -116,7 +116,9 @@ JWT_COOKIE_ACCESS_NAME    = 'access'
 JWT_COOKIE_REFRESH_NAME   = 'refresh'
 # Security flags
 JWT_COOKIE_SECURE         = True    # ngrok uses HTTPS — required for SameSite=None
-JWT_COOKIE_HTTPONLY       = True    # Never readable by JavaScript
+# JWT_COOKIE_HTTPONLY       = True   # Never readable by JavaScript
+JWT_COOKIE_ACCESS_HTTPONLY = False  # Readable by JS (e.g. document.cookie)
+JWT_COOKIE_REFRESH_HTTPONLY= True  
 JWT_COOKIE_SAMESITE       = 'None'  # Cross-site: frontend & backend on different hosts
 # Lifetimes must match SIMPLE_JWT token lifetimes (in seconds)
 JWT_COOKIE_ACCESS_MAX_AGE  = 7 * 3600         # 7 hours
@@ -142,12 +144,20 @@ CORS_ALLOWED_ORIGINS = [
     "https://sensesai.app",
 ]
 
-CORS_ALLOW_HEADERS = list(default_headers) + [
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
     "authorization",
     "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
     "x-csrftoken",
-    "ngrok-skip-browser-warning",
+    "x-requested-with",
+    "ngrok-skip-browser-warning",  # required by the frontend when using ngrok
 ]
+
 
 CORS_ALLOW_METHODS = [
     "GET",
@@ -235,6 +245,18 @@ CHANNEL_LAYERS = {
     }
 }
 
+
+
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": CELERY_BROKER_URL,  # reuse same redis
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
 # --------------------------------------------------
 # EMAIL
 # --------------------------------------------------
