@@ -15,6 +15,7 @@ from .views import (
     TokenRefreshCookieView,
     UserUpdateDeleteAPIView,
     UserLimitsOverviewView,
+    UserCreateAPIView
 )
 
 urlpatterns = [
