@@ -46,7 +46,7 @@ PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
 # --------------------------------------------------
 
 SECRET_KEY = config("SECRET_KEY", default="unsafe-secret")
-DEBUG = False
+DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
 # --------------------------------------------------
