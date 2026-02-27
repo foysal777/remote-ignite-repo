@@ -20,7 +20,7 @@ from django.conf import settings
 ACCESS_NAME    = getattr(settings, "JWT_COOKIE_ACCESS_NAME",    "access")
 REFRESH_NAME   = getattr(settings, "JWT_COOKIE_REFRESH_NAME",   "refresh")
 SECURE         = getattr(settings, "JWT_COOKIE_SECURE",         False)
-HTTPONLY       = getattr(settings, "JWT_COOKIE_HTTPONLY",        True)
+HTTPONLY       = getattr(settings, "JWT_COOKIE_HTTPONLY",        False)
 SAMESITE       = getattr(settings, "JWT_COOKIE_SAMESITE",        "Lax")
 ACCESS_MAX_AGE = getattr(settings, "JWT_COOKIE_ACCESS_MAX_AGE",  120)
 REFRESH_MAX_AGE= getattr(settings, "JWT_COOKIE_REFRESH_MAX_AGE", 7 * 24 * 3600)
