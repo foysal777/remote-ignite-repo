@@ -12,6 +12,20 @@ from corsheaders.defaults import default_headers
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ENV VARIABLES (Injected by entrypoint.sh)
+
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_PREMIUM_PRICE_ID = os.getenv("STRIPE_PREMIUM_PRICE_ID")
+STRIPE_TOPUP_PRICE_ID = os.getenv("STRIPE_TOPUP_PRICE_ID")
+
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
+
 # --------------------------------------------------
 # AWS SECRETS
 # --------------------------------------------------
