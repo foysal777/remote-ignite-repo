@@ -16,28 +16,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # AWS SECRETS
 # --------------------------------------------------
 
-from .aws_secrets import load_aws_secrets
+# from .aws_secrets import load_aws_secrets
 
 
-aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
+# aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
 
-OPENAI_API_KEY = aws_secrets.get("OPENAI_API_KEY", "")
-PINECONE_API_KEY = aws_secrets.get("PINECONE_API_KEY", "")
-ELEVENLABS_API_KEY = aws_secrets.get("ELEVENLABS_API_KEY", "").strip()
-STRIPE_SECRET_KEY = aws_secrets.get("STRIPE_SECRET_KEY", "")
-STRIPE_PREMIUM_PRICE_ID = aws_secrets.get("STRIPE_PREMIUM_PRICE_ID", "")
-STRIPE_TOPUP_PRICE_ID = aws_secrets.get("STRIPE_TOPUP_PRICE_ID", "")
-STRIPE_WEBHOOK_SECRET = aws_secrets.get("STRIPE_WEBHOOK_SECRET", "")
+# OPENAI_API_KEY = aws_secrets.get("OPENAI_API_KEY", "")
+# PINECONE_API_KEY = aws_secrets.get("PINECONE_API_KEY", "")
+# ELEVENLABS_API_KEY = aws_secrets.get("ELEVENLABS_API_KEY", "").strip()
+# STRIPE_SECRET_KEY = aws_secrets.get("STRIPE_SECRET_KEY", "")
+# STRIPE_PREMIUM_PRICE_ID = aws_secrets.get("STRIPE_PREMIUM_PRICE_ID", "")
+# STRIPE_TOPUP_PRICE_ID = aws_secrets.get("STRIPE_TOPUP_PRICE_ID", "")
+# STRIPE_WEBHOOK_SECRET = aws_secrets.get("STRIPE_WEBHOOK_SECRET", "")
 
-os.environ.update({
-    "OPENAI_API_KEY": OPENAI_API_KEY,
-    "PINECONE_API_KEY": PINECONE_API_KEY,
-    "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
-    "STRIPE_SECRET_KEY": STRIPE_SECRET_KEY,
-    "STRIPE_WEBHOOK_SECRET": STRIPE_WEBHOOK_SECRET,
-    "STRIPE_PREMIUM_PRICE_ID": STRIPE_PREMIUM_PRICE_ID,
-    "STRIPE_TOPUP_PRICE_ID": STRIPE_TOPUP_PRICE_ID,
-})
+# os.environ.update({
+#     "OPENAI_API_KEY": OPENAI_API_KEY,
+#     "PINECONE_API_KEY": PINECONE_API_KEY,
+#     "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
+#     "STRIPE_SECRET_KEY": STRIPE_SECRET_KEY,
+#     "STRIPE_WEBHOOK_SECRET": STRIPE_WEBHOOK_SECRET,
+#     "STRIPE_PREMIUM_PRICE_ID": STRIPE_PREMIUM_PRICE_ID,
+#     "STRIPE_TOPUP_PRICE_ID": STRIPE_TOPUP_PRICE_ID,
+# })
 
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
 

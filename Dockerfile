@@ -1,33 +1,31 @@
 # FROM python:3.11-slim
 
-# # Environment variables
 # ENV PYTHONDONTWRITEBYTECODE=1
 # ENV PYTHONUNBUFFERED=1
 
-# # Set working directory
 # WORKDIR /app
 
-# # System dependencies
 # RUN apt-get update && apt-get install -y \
 #     build-essential \
 #     libpq-dev \
 #     curl \
+#     netcat-openbsd \
 #     && rm -rf /var/lib/apt/lists/*
 
-# # Install Python dependencies
 # COPY requirements.txt .
 # RUN pip install --upgrade pip \
 #     && pip install --no-cache-dir -r requirements.txt
 
-# # Copy project
 # COPY . .
 
-# # Expose Django port
+# COPY entrypoint.sh /entrypoint.sh
+# RUN chmod +x /entrypoint.sh
+
 # EXPOSE 8000
 
-# # Run with Gunicorn (ASGI-ready)
-# CMD ["gunicorn", "project_root.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
+# ENTRYPOINT ["/entrypoint.sh"]
 
+# CMD ["gunicorn", "project_root.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
 
 
 FROM python:3.11-slim
@@ -35,8 +33,10 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Working directory
 WORKDIR /app
 
+# System dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
@@ -44,17 +44,23 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
+# Python dependencies
 COPY requirements.txt .
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
+# Copy project
 COPY . .
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Entrypoint
+RUN chmod +x /app/entrypoint.sh
 
+# Port
 EXPOSE 8000
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Start container
+ENTRYPOINT ["/app/entrypoint.sh"]
 
-CMD ["gunicorn", "project_root.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
+CMD ["gunicorn", "project_root.asgi:application", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "--bind", "0.0.0.0:8000"]

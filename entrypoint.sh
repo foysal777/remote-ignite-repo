@@ -1,4 +1,32 @@
+# #!/bin/sh
+
+# echo " Waiting for PostgreSQL..."
+
+# while ! nc -z postgres 5432; do
+#   sleep 2
+# done
+
+# echo " PostgreSQL started"
+
+# echo " Making migrations..."
+# python manage.py makemigrations --noinput
+
+# echo " Running migrations..."
+# python manage.py migrate --noinput
+
+# echo " Collecting static files..."
+# python manage.py collectstatic --noinput
+
+# echo " Starting Gunicorn..."
+
+# exec "$@"
+
+
 #!/bin/sh
+set -e
+
+echo " Loading AWS Secrets..."
+python load_secrets.py
 
 echo " Waiting for PostgreSQL..."
 
