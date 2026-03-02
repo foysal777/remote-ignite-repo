@@ -4,8 +4,11 @@ set -e
 cd /app
 
 echo "Loading AWS Secrets..."
-eval "$(python load_secrets_env.py)"
-echo "Secrets exported."
+python load_secrets_env.py > /app/.env.runtime
+
+set -a
+. /app/.env.runtime
+set +a
 
 echo "Waiting for PostgreSQL..."
 while ! nc -z postgres 5432; do
@@ -14,13 +17,7 @@ done
 
 echo "PostgreSQL started"
 
-echo "Making migrations..."
-python manage.py makemigrations --noinput
-
-echo "Running migrations..."
 python manage.py migrate --noinput
-
-echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
 echo "Starting Gunicorn..."
