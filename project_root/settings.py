@@ -5,53 +5,53 @@ from dotenv import load_dotenv
 from datetime import timedelta
 from corsheaders.defaults import default_headers
 
-# --------------------------------------------------
-# ENV
-# --------------------------------------------------
+# # --------------------------------------------------
+# # ENV
+# # --------------------------------------------------
 
-load_dotenv()
-BASE_DIR = Path(__file__).resolve().parent.parent
+# load_dotenv()
+# BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ENV VARIABLES (Injected by entrypoint.sh)
+# # ENV VARIABLES (Injected by entrypoint.sh)
 
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+# ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-STRIPE_PREMIUM_PRICE_ID = os.getenv("STRIPE_PREMIUM_PRICE_ID")
-STRIPE_TOPUP_PRICE_ID = os.getenv("STRIPE_TOPUP_PRICE_ID")
+# STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+# STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+# STRIPE_PREMIUM_PRICE_ID = os.getenv("STRIPE_PREMIUM_PRICE_ID")
+# STRIPE_TOPUP_PRICE_ID = os.getenv("STRIPE_TOPUP_PRICE_ID")
 
-PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
+# PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
 
 # --------------------------------------------------
 # AWS SECRETS
 # --------------------------------------------------
 
-# from .aws_secrets import load_aws_secrets
+from .aws_secrets import load_aws_secrets
 
 
-# aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
+aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
 
-# OPENAI_API_KEY = aws_secrets.get("OPENAI_API_KEY", "")
-# PINECONE_API_KEY = aws_secrets.get("PINECONE_API_KEY", "")
-# ELEVENLABS_API_KEY = aws_secrets.get("ELEVENLABS_API_KEY", "").strip()
-# STRIPE_SECRET_KEY = aws_secrets.get("STRIPE_SECRET_KEY", "")
-# STRIPE_PREMIUM_PRICE_ID = aws_secrets.get("STRIPE_PREMIUM_PRICE_ID", "")
-# STRIPE_TOPUP_PRICE_ID = aws_secrets.get("STRIPE_TOPUP_PRICE_ID", "")
-# STRIPE_WEBHOOK_SECRET = aws_secrets.get("STRIPE_WEBHOOK_SECRET", "")
+OPENAI_API_KEY = aws_secrets.get("OPENAI_API_KEY", "")
+PINECONE_API_KEY = aws_secrets.get("PINECONE_API_KEY", "")
+ELEVENLABS_API_KEY = aws_secrets.get("ELEVENLABS_API_KEY", "").strip()
+STRIPE_SECRET_KEY = aws_secrets.get("STRIPE_SECRET_KEY", "")
+STRIPE_PREMIUM_PRICE_ID = aws_secrets.get("STRIPE_PREMIUM_PRICE_ID", "")
+STRIPE_TOPUP_PRICE_ID = aws_secrets.get("STRIPE_TOPUP_PRICE_ID", "")
+STRIPE_WEBHOOK_SECRET = aws_secrets.get("STRIPE_WEBHOOK_SECRET", "")
 
-# os.environ.update({
-#     "OPENAI_API_KEY": OPENAI_API_KEY,
-#     "PINECONE_API_KEY": PINECONE_API_KEY,
-#     "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
-#     "STRIPE_SECRET_KEY": STRIPE_SECRET_KEY,
-#     "STRIPE_WEBHOOK_SECRET": STRIPE_WEBHOOK_SECRET,
-#     "STRIPE_PREMIUM_PRICE_ID": STRIPE_PREMIUM_PRICE_ID,
-#     "STRIPE_TOPUP_PRICE_ID": STRIPE_TOPUP_PRICE_ID,
-# })
+os.environ.update({
+    "OPENAI_API_KEY": OPENAI_API_KEY,
+    "PINECONE_API_KEY": PINECONE_API_KEY,
+    "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
+    "STRIPE_SECRET_KEY": STRIPE_SECRET_KEY,
+    "STRIPE_WEBHOOK_SECRET": STRIPE_WEBHOOK_SECRET,
+    "STRIPE_PREMIUM_PRICE_ID": STRIPE_PREMIUM_PRICE_ID,
+    "STRIPE_TOPUP_PRICE_ID": STRIPE_TOPUP_PRICE_ID,
+})
 
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
 
