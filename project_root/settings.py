@@ -9,8 +9,8 @@ from corsheaders.defaults import default_headers
 # # ENV
 # # --------------------------------------------------
 
-# load_dotenv()
-# BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # # ENV VARIABLES (Injected by entrypoint.sh)
 
