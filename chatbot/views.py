@@ -938,7 +938,7 @@ def stripe_webhook(request):
 
             # ✅ Voice rules (SET, not +=)
             if first_time_premium:
-                user.total_time += VOICE_BASE_SEC
+                user.total_time = VOICE_BASE_SEC
             else:
                 user.total_time = VOICE_BASE_SEC + prev_remaining_voice
 
