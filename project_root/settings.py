@@ -147,7 +147,7 @@ CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
     "https://resplendent-figolla-685e32.netlify.app",
-    "https://xccess.sensesagi.app",
+    "https://xccess.sensesai.app",
     "https://sensesai.app",
 ]
 
@@ -177,7 +177,7 @@ CORS_ALLOW_METHODS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "https://resplendent-figolla-685e32.netlify.app",
-    "https://xccess.sensesagi.app",
+    "https://xccess.sensesai.app",
     "https://sensesai.app",
 ]
 
