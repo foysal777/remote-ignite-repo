@@ -34,6 +34,7 @@ ACCESS_HTTPONLY = getattr(settings, "JWT_COOKIE_ACCESS_HTTPONLY", False)
 REFRESH_HTTPONLY= getattr(settings, "JWT_COOKIE_REFRESH_HTTPONLY", True)
 
 SAMESITE        = getattr(settings, "JWT_COOKIE_SAMESITE",       "Lax")
+DOMAIN          = getattr(settings, "JWT_COOKIE_DOMAIN",         None)
 ACCESS_MAX_AGE  = getattr(settings, "JWT_COOKIE_ACCESS_MAX_AGE",  120)
 REFRESH_MAX_AGE = getattr(settings, "JWT_COOKIE_REFRESH_MAX_AGE", 7 * 24 * 3600)
 
@@ -50,6 +51,7 @@ def set_auth_cookies(response, *, access_token: str, refresh_token: str) -> None
         httponly = ACCESS_HTTPONLY,
         secure   = SECURE,
         samesite = SAMESITE,
+        domain   = DOMAIN,
     )
     response.set_cookie(
         key      = REFRESH_NAME,
@@ -58,6 +60,7 @@ def set_auth_cookies(response, *, access_token: str, refresh_token: str) -> None
         httponly = REFRESH_HTTPONLY,
         secure   = SECURE,
         samesite = SAMESITE,
+        domain   = DOMAIN,
     )
 
 
@@ -76,6 +79,7 @@ def delete_auth_cookies(response) -> None:
         httponly = ACCESS_HTTPONLY,
         secure   = SECURE,
         samesite = SAMESITE,
+        domain   = DOMAIN,
     )
     response.set_cookie(
         key      = REFRESH_NAME,
@@ -84,5 +88,6 @@ def delete_auth_cookies(response) -> None:
         httponly = REFRESH_HTTPONLY,
         secure   = SECURE,
         samesite = SAMESITE,
+        domain   = DOMAIN,
     )
 

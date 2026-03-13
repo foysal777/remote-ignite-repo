@@ -128,6 +128,7 @@ JWT_COOKIE_ACCESS_HTTPONLY = False  # Readable by JS (e.g. document.cookie)
 JWT_COOKIE_REFRESH_HTTPONLY= True  
 JWT_COOKIE_SAMESITE       = 'None'  # Cross-site: frontend & backend on different hosts
 # Lifetimes must match SIMPLE_JWT token lifetimes (in seconds)
+JWT_COOKIE_DOMAIN         = '.sensesai.app'
 JWT_COOKIE_ACCESS_MAX_AGE  = 7 * 3600         # 7 hours
 JWT_COOKIE_REFRESH_MAX_AGE = 7 * 24 * 3600    # 7 days
 # --------------------------------------------------
@@ -149,7 +150,17 @@ CORS_ALLOWED_ORIGINS = [
     "https://resplendent-figolla-685e32.netlify.app",
     "https://xccess.sensesai.app",
     "https://sensesai.app",
+    
 ]
+
+
+
+SESSION_COOKIE_DOMAIN = ".sensesai.app"
+CSRF_COOKIE_DOMAIN = ".sensesai.app"
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
 
 
 CORS_ALLOW_HEADERS = [
