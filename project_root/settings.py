@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # # ENV VARIABLES (Injected by entrypoint.sh)
 
-
+FIREBASE_CERT_PATH = os.path.join(BASE_DIR, 'firebase-service-account.json')
 
 
 # PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")

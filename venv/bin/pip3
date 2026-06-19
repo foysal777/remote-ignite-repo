@@ -1,4 +1,6 @@
-#!/usr/bin/var/www/ignite-backend/venv/bin/python3
+#!/bin/sh
+'''exec' "/home/foysal_munna/Foysal_Munna/Backend Code/ignite vps/venv/bin/python" "$0" "$@"
+' '''
 # -*- coding: utf-8 -*-
 import re
 import sys
