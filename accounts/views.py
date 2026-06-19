@@ -120,7 +120,27 @@ class VerifyOTPView(generics.GenericAPIView):
                     user.password = cached_data['password_hash']
                     user.is_active = True
                     user.save()
-                message = "Account verified successfully. You can now log in."
+                
+                # Generate JWT tokens and set as HttpOnly cookies
+                refresh = RefreshToken.for_user(user)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+                
+                response = Response({
+                    'detail': 'Account verified successfully. You are now logged in.',
+                    'role': user.role,
+                    'email': user.email
+                }, status=status.HTTP_200_OK)
+                
+                # Set tokens as HttpOnly cookies for browser clients
+                set_auth_cookies(
+                    response,
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                )
+                
+                cache.delete(cache_key)
+                return response
 
         
             elif purpose == "password_reset":
