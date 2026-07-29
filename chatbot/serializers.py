@@ -17,3 +17,10 @@ class UploadRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = UploadRecord
         fields = "__all__"
+
+from .models import AdminVideo
+
+class AdminVideoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminVideo
+        fields = ['id', 'url', 'created_at']

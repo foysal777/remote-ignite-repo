@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import SaveVoiceMessageView, CancelSubscriptionView, ChatHistoryView, FirebaseGoogleAuthView, GetSignedURLView, ShowAllFileList, UpdateFileCategory, stripe_webhook,CreatePremiumSubscriptionView,CreateTopUpCheckoutView,FileUploadView ,UploadStatusView ,FileUploadViewed , QueryView, UserAllChatsView ,VoiceResponseView, TextToVoiceView, user_plan_info
+from .views import SaveVoiceMessageView, CancelSubscriptionView, ChatHistoryView, FirebaseGoogleAuthView, GetSignedURLView, ShowAllFileList, UpdateFileCategory, stripe_webhook,CreatePremiumSubscriptionView,CreateTopUpCheckoutView,FileUploadView ,UploadStatusView ,FileUploadViewed , QueryView, UserAllChatsView ,VoiceResponseView, TextToVoiceView, user_plan_info, AdminVideoListCreateView
 
 urlpatterns = [
     path('upload/', FileUploadView.as_view(), name='upload-file'),
@@ -20,10 +20,5 @@ urlpatterns = [
     path("auth/google/", FirebaseGoogleAuthView.as_view()),
     path("signed-url/", GetSignedURLView.as_view(), name="signed-url"),
     path("save-message/", SaveVoiceMessageView.as_view()),
-
-
-
-
-
-
+    path("admin-video/", AdminVideoListCreateView.as_view(), name="admin-video"),
 ]

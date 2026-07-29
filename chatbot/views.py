@@ -1662,3 +1662,18 @@ class SaveVoiceMessageView(APIView):
             status=status.HTTP_201_CREATED
         )
 
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from accounts.views import IsAdmin
+from .models import AdminVideo
+from .serializers import AdminVideoSerializer
+
+class AdminVideoListCreateView(generics.ListCreateAPIView):
+    queryset = AdminVideo.objects.all().order_by('-created_at')
+    serializer_class = AdminVideoSerializer
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsAdmin()]
+        return [IsAuthenticated()]
+
