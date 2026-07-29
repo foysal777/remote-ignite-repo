@@ -25,12 +25,15 @@ FIREBASE_CERT_PATH = os.path.join(BASE_DIR, 'firebase-service-account.json')
 
 from .aws_secrets import load_aws_secrets
 
-
-aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
+try:
+    aws_secrets = load_aws_secrets("prod/senses", region_name="us-east-2")
+except Exception as e:
+    print(f"WARNING: Could not load AWS secrets: {e}. Using empty defaults.")
+    aws_secrets = {}
 
 OPENAI_API_KEY = aws_secrets.get("OPENAI_API_KEY", "")
 PINECONE_API_KEY = aws_secrets.get("PINECONE_API_KEY", "")
-ELEVENLABS_API_KEY = aws_secrets.get("ELEVENLABS_API_KEY", "").strip()
+ELEVENLABS_API_KEY = aws_secrets.get("ELEVENLABS_API_KEY", "").strip() if aws_secrets.get("ELEVENLABS_API_KEY") else ""
 STRIPE_SECRET_KEY = aws_secrets.get("STRIPE_SECRET_KEY", "")
 STRIPE_PREMIUM_PRICE_ID = aws_secrets.get("STRIPE_PREMIUM_PRICE_ID", "")
 STRIPE_TOPUP_PRICE_ID = aws_secrets.get("STRIPE_TOPUP_PRICE_ID", "")
@@ -45,6 +48,7 @@ os.environ.update({
     "STRIPE_PREMIUM_PRICE_ID": STRIPE_PREMIUM_PRICE_ID,
     "STRIPE_TOPUP_PRICE_ID": STRIPE_TOPUP_PRICE_ID,
 })
+
 
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "")
 
@@ -236,23 +240,33 @@ if not firebase_admin._apps:
 # DATABASE
 # --------------------------------------------------
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME"),
-        "USER": config("DB_USER"),
-        "PASSWORD": config("DB_PASSWORD"),
-        "HOST": config("DB_HOST"),
-        "PORT": config("DB_PORT", cast=int),
+try:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("DB_NAME"),
+            "USER": config("DB_USER"),
+            "PASSWORD": config("DB_PASSWORD"),
+            "HOST": config("DB_HOST"),
+            "PORT": config("DB_PORT", cast=int),
+        }
     }
-}
+except Exception as e:
+    print(f"WARNING: DB config error ({e}). Falling back to local SQLite.")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
+        }
+    }
 
-# --------------------------------------------------
-# REDIS / CELERY
-# --------------------------------------------------
-
-CELERY_BROKER_URL = config("CELERY_BROKER_URL")
-CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND")
+try:
+    CELERY_BROKER_URL = config("CELERY_BROKER_URL")
+    CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND")
+except Exception as e:
+    print(f"WARNING: Celery config error ({e}). Falling back to local Redis defaults.")
+    CELERY_BROKER_URL = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
 
 CHANNEL_LAYERS = {
     "default": {
@@ -266,27 +280,59 @@ CHANNEL_LAYERS = {
 
 
 
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": CELERY_BROKER_URL,  # reuse same redis
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        },
+
+import sys
+
+if "test" in sys.argv or not CELERY_BROKER_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+        }
     }
-}
+else:
+    try:
+        CACHES = {
+            "default": {
+                "BACKEND": "django_redis.cache.RedisCache",
+                "LOCATION": CELERY_BROKER_URL,  # reuse same redis
+                "OPTIONS": {
+                    "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                },
+            }
+        }
+    except Exception:
+        CACHES = {
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                "LOCATION": "unique-snowflake",
+            }
+        }
+
 # --------------------------------------------------
 # EMAIL
 # --------------------------------------------------
 
-EMAIL_BACKEND = config('EMAIL_BACKEND')
-EMAIL_HOST = config('EMAIL_HOST')
-EMAIL_PORT = config('EMAIL_PORT', cast=int)  
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
-EMAIL_USE_SSL = config('EMAIL_USE_SSL', cast=bool)
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
-EMAIL_HOST_USER = config('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD='072iH3%#'
+try:
+    EMAIL_BACKEND = config('EMAIL_BACKEND')
+    EMAIL_HOST = config('EMAIL_HOST')
+    EMAIL_PORT = config('EMAIL_PORT', cast=int)  
+    EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
+    EMAIL_USE_SSL = config('EMAIL_USE_SSL', cast=bool)
+    DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
+    EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='072iH3%#')
+except Exception as e:
+    print(f"WARNING: Email config error ({e}). Using default dummy email backend.")
+    EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+    EMAIL_HOST = 'localhost'
+    EMAIL_PORT = 25
+    EMAIL_USE_TLS = False
+    EMAIL_USE_SSL = False
+    DEFAULT_FROM_EMAIL = 'support@example.com'
+    EMAIL_HOST_USER = 'support@example.com'
+    EMAIL_HOST_PASSWORD = 'password'
+
 
 ELEVENLABS_AGENT_ID = config("AGENT_ID")
 

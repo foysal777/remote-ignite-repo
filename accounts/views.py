@@ -3,11 +3,12 @@ from django.contrib.auth.hashers import make_password
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User
+from .models import User, InviteCode
 from .serializers import (
     RegisterSerializer, OTPSerializer, LoginSerializer,
     ResendOTPSerializer, ForgotPasswordSerializer,
-    ResetPasswordSerializer, ChangePasswordSerializer
+    ResetPasswordSerializer, ChangePasswordSerializer,
+    InviteCodeSerializer
 )
 from .utils import generate_otp, send_otp_email, send_password_reset_otp_email
 from django.utils import timezone
@@ -41,6 +42,7 @@ class RegisterView(generics.GenericAPIView):
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
+        invite_code = serializer.validated_data['invite_code']
 
         if User.objects.filter(email=email, is_active=True).exists():
             return Response(
@@ -58,6 +60,7 @@ class RegisterView(generics.GenericAPIView):
             'email': email,
             'password_hash': hashed_password,
             'otp': otp,
+            'invite_code': invite_code,
         }
 
         cache.set(cache_key, user_data, timeout=600)
@@ -109,6 +112,21 @@ class VerifyOTPView(generics.GenericAPIView):
         try:
   
             if purpose == "registration":
+                invite_code_str = cached_data.get('invite_code')
+                try:
+                    invite = InviteCode.objects.get(code=invite_code_str)
+                except InviteCode.DoesNotExist:
+                    return Response(
+                        {"detail": "Invalid invite code associated with this registration."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                if invite.is_used:
+                    return Response(
+                        {"detail": "The invite code for this registration has already been used."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
                 user, created = User.objects.get_or_create(
                     email=cached_data['email'],
                     defaults={
@@ -120,6 +138,11 @@ class VerifyOTPView(generics.GenericAPIView):
                     user.password = cached_data['password_hash']
                     user.is_active = True
                     user.save()
+
+                invite.is_used = True
+                invite.used_by = user
+                invite.used_at = timezone.now()
+                invite.save()
                 
                 # Generate JWT tokens and set as HttpOnly cookies
                 refresh = RefreshToken.for_user(user)
@@ -603,3 +626,9 @@ class UserLimitsOverviewView(APIView):
             "is_plan_paid":    bool(getattr(user, "is_plan_paid", False)),
             "plan_end_date":   plan_end_value,
         }, status=status.HTTP_200_OK)
+
+
+class InviteCodeListCreateView(generics.ListCreateAPIView):
+    queryset = InviteCode.objects.all().order_by('-created_at')
+    serializer_class = InviteCodeSerializer
+    permission_classes = [IsAdmin]

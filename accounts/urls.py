@@ -15,7 +15,8 @@ from .views import (
     TokenRefreshCookieView,
     UserUpdateDeleteAPIView,
     UserLimitsOverviewView,
-    UserCreateAPIView
+    UserCreateAPIView,
+    InviteCodeListCreateView
 )
 
 urlpatterns = [
@@ -34,5 +35,5 @@ urlpatterns = [
     path("users/", UserCreateAPIView.as_view(), name="user-create"),
     path("users/<int:id>/", UserUpdateDeleteAPIView.as_view(), name="user-ud"),
     path("user-limits/", UserLimitsOverviewView.as_view(), name="user-limits"),
-
+    path("invite-code/", InviteCodeListCreateView.as_view(), name="invite-code"),
 ]

@@ -1,22 +1,62 @@
 from rest_framework import serializers
-from .models import User , Profile
+from .models import User , Profile, InviteCode
 from django.contrib.auth import authenticate
 from drf_spectacular.utils import extend_schema_field
 from drf_spectacular.types import OpenApiTypes
 import re
+import random
+import string
+
+def generate_unique_code():
+    while True:
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        if not InviteCode.objects.filter(code=code).exists():
+            return code
+
+class InviteCodeSerializer(serializers.ModelSerializer):
+    code = serializers.CharField(required=False, max_length=50)
+    used_by_email = serializers.EmailField(source='used_by.email', read_only=True)
+
+    class Meta:
+        model = InviteCode
+        fields = ['id', 'code', 'is_used', 'used_by', 'used_by_email', 'created_at', 'used_at']
+        read_only_fields = ['id', 'is_used', 'used_by', 'created_at', 'used_at']
+
+    def validate_code(self, value):
+        if value and InviteCode.objects.filter(code=value).exists():
+            raise serializers.ValidationError("This invite code already exists.")
+        return value
+
+    def create(self, validated_data):
+        if 'code' not in validated_data or not validated_data['code']:
+            validated_data['code'] = generate_unique_code()
+        return super().create(validated_data)
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    invite_code = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = User
-        fields = ('email', 'password')
+        fields = ('email', 'password', 'invite_code')
+
+    def validate_invite_code(self, value):
+        try:
+            invite = InviteCode.objects.get(code=value)
+        except InviteCode.DoesNotExist:
+            raise serializers.ValidationError("Invalid invite code.")
+        
+        if invite.is_used:
+            raise serializers.ValidationError("This invite code has already been used.")
+        
+        return value
 
     def validate_password(self, value):
         if len(value) < 6:
             raise serializers.ValidationError(
                 "Password must be at least 6 characters long."
             )
+
  
         if not re.search(r'[A-Z]', value):
             raise serializers.ValidationError(

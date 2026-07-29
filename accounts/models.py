@@ -132,3 +132,20 @@ class Profile(models.Model):
     
 
 
+
+
+class InviteCode(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    is_used = models.BooleanField(default=False)
+    used_by = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='used_invite_code'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.code} ({'Used' if self.is_used else 'Unused'})"
