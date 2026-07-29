@@ -77,6 +77,8 @@ INSTALLED_APPS = [
     "chatbot",
     "subscriptions",
     "rest_framework",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
